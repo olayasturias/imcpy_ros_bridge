@@ -21,7 +21,7 @@ class Imc2Ros(DynamicActor):
         self.heartbeat.append(target_name)
 
         # ROS STUFF
-        self.pose_publisher_ = self.ros_node.create_publisher(PoseStamped, 'dune_pose', 10)
+        self.pose_publisher_ = self.ros_node.create_publisher(PoseStamped, 'base_link', 10)
         
         # This command starts the asyncio event loop
         self.run()
