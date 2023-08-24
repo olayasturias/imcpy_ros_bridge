@@ -15,8 +15,9 @@ def generate_launch_description():
       Node(
          package='imcpy_ros_bridge',
          executable='imc2ros',
-         namespace='lauv_simulator_1',
+         namespace='from_lauv_simulator_1',
          name='imc2ros',
+         output='screen',
          parameters=[{
             'target_name': LaunchConfiguration('target_name')
          }]
