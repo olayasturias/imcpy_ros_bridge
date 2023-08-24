@@ -7,6 +7,8 @@ import imcpy
 from imcpy.actors.dynamic import DynamicActor
 from imcpy.decorators import Periodic, Subscribe
 
+from imcpy.network.utils import get_interfaces
+
 # Acknowledgements: Laszlo u da best
 
 
@@ -22,6 +24,16 @@ class Imc2Ros(DynamicActor):
 
         # ROS STUFF
         self.pose_publisher_ = self.ros_node.create_publisher(PoseStamped, 'base_link', 10)
+
+        # debugging stuff
+        
+        # if self._port_imc:  # Port must be ready to build IMC service string
+        #     services = ['imc+udp://{}:{}/'.format(adr[1], self._port_imc) for adr in get_interfaces()]
+        #     self.ros_node.get_logger().info('services: {}'.format(services))
+        #     if not self.services:
+        #         # No external interfaces available, announce localhost/loopback
+        #         self.services = ['imc+udp://{}:{}/'.format(adr[1], self._port_imc) for adr in get_interfaces(False)]
+        #         self.ros_node.get_logger().info('services: {}'.format(self.services))
         
         # This command starts the asyncio event loop
         self.run()
@@ -45,7 +57,9 @@ class Imc2Ros(DynamicActor):
 
     @Periodic(0.5)
     def send_state(self):
+        self.ros_node.get_logger().info('helo omelettes')
         try:
+            # self.ros_node.get_logger().info(self.__dict__)
             # This function resolves the map of connected nodes
             node = self.resolve_node_id(self.target_name)
 
@@ -61,11 +75,11 @@ class Imc2Ros(DynamicActor):
 
             # Send the IMC message to the node
             self.send(node, log_book_entry)
-            print('message sent to node')
+            self.ros_node.get_logger().info('message sent to node')
 
         except KeyError as e:
             # Target system is not connected
-            print('Target system is not connected.')
+            self.ros_node.get_logger().info('Target system is not connected.')
 
 
 def main():

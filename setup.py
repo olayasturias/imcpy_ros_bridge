@@ -24,7 +24,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'imc2ros = imcpy_ros_bridge.imc2ros:main'
+            'imc2ros = imcpy_ros_bridge.imc2ros:main',
+            'ros2imc = imcpy_ros_bridge.ros2imc:main',
+            'follow_reference_example = imcpy_ros_bridge.follow_reference_example:main'
         ],
     },
 )
