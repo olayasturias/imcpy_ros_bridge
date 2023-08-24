@@ -20,6 +20,7 @@ def generate_launch_description():
          output='screen',
          parameters=[{
             'target_name': LaunchConfiguration('target_name')
-         }]
+         }],
+         arguments=['--ros-args', '--log-level', 'debug']
       ),
    ])

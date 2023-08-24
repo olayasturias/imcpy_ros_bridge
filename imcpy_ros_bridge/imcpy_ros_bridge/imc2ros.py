@@ -130,34 +130,40 @@ class Imc2Ros(DynamicActor):
         msg = DesiredHeading()
         msg.value = imc_msg.value
         self.desired_heading_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Desired Heading {}.'.format(imc_msg.value))
 
 
     def imc_DHR_to_ros(self, imc_msg: imcpy.DesiredHeadingRate):
         msg = DesiredHeadingRate()
         msg.value = imc_msg.value
         self.desired_heading_rate_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Desired Heading Rate {}.'.format(imc_msg.value))
 
     def imc_DP_to_ros(self, imc_msg: imcpy.DesiredPitch):
         msg = DesiredPitch()
         msg.value = imc_msg.value
         self.desired_pitch_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Desired Pitch {}.'.format(imc_msg.value))
 
     def imc_DR_to_ros(self, imc_msg: imcpy.DesiredRoll):
         msg = DesiredRoll()
         msg.value = imc_msg.value
         self.desired_roll_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Desired Roll {}.'.format(imc_msg.value))
     
     def imc_DS_to_ros(self, imc_msg: imcpy.DesiredSpeed):
         msg = DesiredSpeed()
         msg.value = imc_msg.value
         msg.speed_units = imc_msg.speed_units
         self.desired_speed_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Desired Speed {}.'.format(imc_msg.value))
     
     def imc_DZ_to_ros(self, imc_msg: imcpy.DesiredZ):
         msg = DesiredZ()
         msg.value = imc_msg.value
         msg.z_units = imc_msg.z_units
         self.desired_z_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Desired Z {}.'.format(imc_msg.value))
     
     def imc_EE_to_ros(self, imc_msg: imcpy.EstimatedState):
         # Publish on PoseStamped (for UNavSim)
@@ -213,6 +219,7 @@ class Imc2Ros(DynamicActor):
         msg.polygon = imc_msg.polygon
 
         self.maneuver_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published maneuver {}.'.format(imc_msg.maneuver_name))
     
     def imc_PC_to_ros(self, imc_msg: imcpy.PlanControl):
         msg = PlanControl()
@@ -224,6 +231,8 @@ class Imc2Ros(DynamicActor):
         msg.info = imc_msg.info
 
         self.plan_control_publisher_.publish(msg)
+
+        self.ros_node.get_logger().debug('Published Plan Control {}.'.format(imc_msg.plan_id))
     
     def imc_PCS_to_ros(self, imc_msg: imcpy.PlanControlState):
         msg = PlanControlState()
@@ -236,6 +245,8 @@ class Imc2Ros(DynamicActor):
         msg.last_outcome = int(imc_msg.last_outcome)
 
         self.plan_control_state_publisher_.publish(msg)
+
+        self.ros_node.get_logger().debug('Published Plan Control State {}.'.format(imc_msg.plan_id))
     
     def imc_PDB_to_ros(self, imc_msg: imcpy.PlanDB):
         msg = PlanDB()
@@ -249,6 +260,8 @@ class Imc2Ros(DynamicActor):
         # msg.plandb_state = imc_msg.plandb_state
 
         self.plan_db_publisher_.publish(msg)
+
+        self.ros_node.get_logger().debug('Published Plan DB {}.'.format(imc_msg.plan_id))
     
     def imc_PDBI_to_ros(self, imc_msg: imcpy.PlanDBInformation):
         msg = PlanDBInformation()
@@ -260,6 +273,8 @@ class Imc2Ros(DynamicActor):
         msg.md5 = imc_msg.md5
 
         self.plan_db_information_publisher_.publish(msg)
+
+        self.ros_node.get_logger().debug('Published Plan DB Information {}.'.format(imc_msg.plan_id))
     
     def imc_PDBS_to_ros(self, imc_msg: imcpy.PlanDBState):
         msg = PlanDBState()
@@ -274,11 +289,15 @@ class Imc2Ros(DynamicActor):
 
         self.plan_db_state_publisher_.publish(msg)
 
+        self.ros_node.get_logger().debug('Published Plan DB State {}.'.format(imc_msg.plan_count))
+
     def imc_PM_to_ros(self, imc_msg: imcpy.PlanManeuver):
         msg = PlanManeuver()
         msg.maneuver = imc_msg.maneuver
 
         self.plan_maneuver_publisher_.publish(msg)
+
+        self.ros_node.get_logger().debug('Published Plan Maneuver {}.'.format(imc_msg.maneuver.maneuver_name))
 
     def imc_PS_to_ros(self, imc_msg: imcpy.PlanSpecification):
         msg = PlanSpecification()
@@ -289,6 +308,7 @@ class Imc2Ros(DynamicActor):
         msg.maneuvers = imc_msg.maneuvers
         
         self.plan_specification_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Plan Specification {}.'.format(imc_msg.plan_id))
         return msg
 
     def imc_PV_to_ros(self, imc_msg: imcpy.PolygonVertex):
@@ -297,6 +317,8 @@ class Imc2Ros(DynamicActor):
         msg.lon = imc_msg.lon
 
         self.polygon_vertex_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Polygon Vertex {}.'.format(imc_msg.lat))
+
 
     def imc_RS_to_ros(self, imc_msg: imcpy.RemoteState):
         msg = RemoteState()
@@ -307,6 +329,8 @@ class Imc2Ros(DynamicActor):
         msg.psi = imc_msg.psi
 
         self.remote_state_publisher_.publish(msg)
+
+        self.ros_node.get_logger().debug('Published Remote State {}.'.format(imc_msg.lat))
 
     def imc_SD_to_ros(self, imc_msg: imcpy.SonarData):
         msg = SonarData()
@@ -319,6 +343,7 @@ class Imc2Ros(DynamicActor):
         msg.data = imc_msg.data
 
         self.sonar_data_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Sonar Data {}.'.format(imc_msg.type))
 
     def imc_VS_to_ros(self, imc_msg: imcpy.VehicleState):
         msg = VehicleState()
@@ -334,6 +359,7 @@ class Imc2Ros(DynamicActor):
         msg.last_error_time = imc_msg.last_error_time
 
         self.vehicle_state_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Vehicle State {}.'.format(imc_msg.op_mode))
 
 
     @Periodic(0.5)
