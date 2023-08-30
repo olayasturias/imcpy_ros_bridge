@@ -2,7 +2,7 @@ import rclpy
 import time
 from rclpy.node import Node
 from imc_ros_msgs.msg import DesiredHeading, DesiredHeadingRate, DesiredPitch, DesiredRoll, DesiredSpeed, DesiredZ
-from imc_ros_msgs.msg import EstimatedState, Maneuver, PolygonVertex, RemoteState, SonarData, VehicleState
+from imc_ros_msgs.msg import EstimatedState, Maneuver, PolygonVertex, RemoteState, SonarData, VehicleState, Goto
 from imc_ros_msgs.msg import PlanControl, PlanControlState, PlanDB, PlanDBInformation,PlanDBState, PlanManeuver, PlanSpecification
 from geometry_msgs.msg import PoseStamped
 
@@ -46,7 +46,7 @@ class Imc2Ros(DynamicActor):
         self.remote_state_publisher_        = self.ros_node.create_publisher(RemoteState,       'remote_state',10)
         self.sonar_data_publisher_          = self.ros_node.create_publisher(SonarData,         'sonar_data',10)
         self.vehicle_state_publisher_       = self.ros_node.create_publisher(VehicleState,      'vehicle_state',10)
-        
+        self.goto_publisher_                = self.ros_node.create_publisher(Goto,              'goto',10)  
         # This command starts the asyncio event loop
         self.run()
 
@@ -122,6 +122,9 @@ class Imc2Ros(DynamicActor):
     def recv_vstate(self, msg: imcpy.VehicleState):
         self.imc_VS_to_ros(msg)
     
+    @Subscribe(imcpy.Goto)
+    def recv_goto(self, msg: imcpy.Goto):
+        self.imc_Goto_to_ros(msg)
 
     
 
@@ -360,6 +363,18 @@ class Imc2Ros(DynamicActor):
 
         self.vehicle_state_publisher_.publish(msg)
         self.ros_node.get_logger().debug('Published Vehicle State {}.'.format(imc_msg.op_mode))
+
+    def imc_Goto_to_ros(self, imc_msg: imcpy.Goto):
+        msg = Goto()
+        msg.lat = imc_msg.lat
+        msg.lon = imc_msg.lon
+        msg.z = imc_msg.z
+        msg.z_units = imc_msg.z_units
+        msg.speed = imc_msg.speed
+        msg.speed_units = imc_msg.speed_units
+
+        self.goto_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published Goto {}.'.format(imc_msg.lat))
 
 
     @Periodic(0.5)

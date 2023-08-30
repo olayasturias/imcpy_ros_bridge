@@ -23,4 +23,15 @@ def generate_launch_description():
          }],
          arguments=['--ros-args', '--log-level', 'debug']
       ),
+      Node(
+         package='imcpy_ros_bridge',
+         executable='ros2imc',
+         namespace='to_lauv_simulator_1',
+         name='ros2imc',
+         output='screen',
+         parameters=[{
+            'target_name': LaunchConfiguration('target_name')
+         }],
+         arguments=['--ros-args', '--log-level', 'debug']
+      ),
    ])

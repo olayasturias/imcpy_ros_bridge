@@ -13,6 +13,7 @@ find_package(sensor_msgs REQUIRED)
 # Custom messages and services
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/Goto.msg"  
   "msg/PlanControl.msg"
   "msg/PlanControlState.msg"
   "msg/VehicleState.msg"
