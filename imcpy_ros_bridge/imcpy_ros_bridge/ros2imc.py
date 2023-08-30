@@ -12,15 +12,6 @@ import numpy as np
 
 # Acknowledgements: Laszlo u da best
 
-# class Color(Enum):
-
-#     RED = 1
-
-#     GREEN = 2
-
-#     BLUE = 3
-
-
 
 class FollowSingleReference(DynamicActor):
     def __init__(self, lat = 41.1854111111111, lon = -8.705886111111111, depth = 2., speed = 1.6, node_name='ros2imc', target_name='lauv-simulator-1'):
