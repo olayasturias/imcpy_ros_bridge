@@ -3,6 +3,7 @@ import logging, sys
 import time
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from imc_ros_msgs.msg import EstimatedState
 logger = logging.getLogger('examples.FollowRef')
 
 import imcpy
@@ -13,10 +14,14 @@ import numpy as np
 # Acknowledgements: Laszlo u da best
 
 
-class FollowSingleReference(DynamicActor):
+class FollowSingleRef(DynamicActor):
+    
+
     def __init__(self, lat = 41.1854111111111, lon = -8.705886111111111, depth = 2., speed = 1.6, node_name='ros2imc', target_name='lauv-simulator-1'):
         super().__init__()  
         self.ros_node = Node(node_name)
+        self.pose_publisher_                = self.ros_node.create_publisher(PoseStamped,       'base_link', 10)
+        self.EE_publisher_                  = self.ros_node.create_publisher(EstimatedState,    'estimated_state', 10)
         self.state = None
         self.last_ref = False
 
@@ -63,6 +68,7 @@ class FollowSingleReference(DynamicActor):
             self.ros_node.get_logger().info('Sending reference')
             self.last_ref = r
             self.send(node, r)
+            return False
         except KeyError:
             pass
 
@@ -77,7 +83,7 @@ class FollowSingleReference(DynamicActor):
         node = self.resolve_node_id(self.target_name)
         self.send(node, pc)
         self.ros_node.get_logger().info('***********Stop FollowRef command*************')
-
+        return True
 
         
     @Periodic(10)
@@ -120,10 +126,12 @@ class FollowSingleReference(DynamicActor):
                 # Send the IMC message to the node
                 self.send(node, pc)
                 self.ros_node.get_logger().info('***********Started FollowRef command*************')
+                return False
 
             except KeyError as e:
                 # Target system is not connected
                 self.ros_node.get_logger().info('Could not deliver GOTO.')
+                return False
 
 
     @Subscribe(imcpy.FollowRefState)
@@ -148,27 +156,63 @@ class FollowSingleReference(DynamicActor):
         elif msg.state == imcpy.FollowRefState.StateEnum.TIMEOUT:
             # Controlling system timed out
             self.ros_node.get_logger().info('Timeout')
+        return False
 
-    @Periodic(1.0)
+    @Subscribe(imcpy.EstimatedState)
+    def recv_estate(self, msg: imcpy.EstimatedState):
+        self.imc_EE_to_ros(msg)
+        return False 
+    
+    @Periodic(5.0)
     def periodic_ref(self):
         if self.last_ref:
             try:
                 self.send(self.target_name, self.last_ref)
             except KeyError:
                 pass
+        return False
   
+    def imc_EE_to_ros(self, imc_msg: imcpy.EstimatedState):
+        # Publish on PoseStamped (for UNavSim)
+        msg = PoseStamped()
+        msg.header.stamp = self.ros_node.get_clock().now().to_msg()
+        msg.header.frame_id = 'dune_map'
+        msg.pose.position.x = imc_msg.x
+        msg.pose.position.y = imc_msg.y
+        msg.pose.position.z = imc_msg.z
+        msg.pose.orientation.x = imc_msg.phi
+        msg.pose.orientation.y = imc_msg.theta
+        msg.pose.orientation.z = imc_msg.psi
+        self.pose_publisher_.publish(msg)
+        # Publish on Estimated State (for ROS2)
+        msg = EstimatedState()
+        msg.x = imc_msg.x
+        msg.y = imc_msg.y
+        msg.z = imc_msg.z
+        msg.phi = imc_msg.phi
+        msg.theta = imc_msg.theta
+        msg.psi = imc_msg.psi
+        msg.u = imc_msg.u
+        msg.v = imc_msg.v
+        msg.w = imc_msg.w
+        msg.p = imc_msg.p
+        msg.q = imc_msg.q
+        msg.r = imc_msg.r
+        msg.depth = imc_msg.depth
+        msg.alt = imc_msg.alt
+        msg.lat = imc_msg.lat
+        msg.lon = imc_msg.lon
+        msg.height = imc_msg.height
+        self.EE_publisher_.publish(msg)
 
+        self.ros_node.get_logger().debug('Published Estimated State {}.'.format(imc_msg.x))
+        return False
 
 def main():
     print('Hi from ros2imc.')
     rclpy.init()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-    ros2imc = FollowSingleReference(node_name='ros2imc', target_name='lauv-simulator-1')
-    
-    while not ros2imc.send_state():
-        ros2imc.ros_node.get_logger().info('Connecting to target system.')
-    ros2imc.ros_node.get_logger().info('Connected to target system.')
-    ros2imc.send_PlanControl()
+    ros2imc = FollowSingleRef(node_name='ros2imc', target_name='lauv-simulator-1')
 
     rclpy.spin(ros2imc.ros_node)
 

@@ -49,38 +49,39 @@ class Imc2Ros(DynamicActor):
         self.goto_publisher_                = self.ros_node.create_publisher(Goto,              'goto',10)  
         # This command starts the asyncio event loop
         self.run()
+        self.ros_node.get_logger().info('Port at {}'.format(self._port_imc))
 
-    @Subscribe(imcpy.DesiredHeading)
-    def recv_heading(self, msg: imcpy.DesiredHeading):
-        self.imc_DH_to_ros(msg)
+    # @Subscribe(imcpy.DesiredHeading)
+    # def recv_heading(self, msg: imcpy.DesiredHeading):
+    #     self.imc_DH_to_ros(msg)
 
-    @Subscribe(imcpy.DesiredHeadingRate)
-    def recv_headingrate(self, msg: imcpy.DesiredHeadingRate):
-        self.imc_DHR_to_ros(msg)
+    # @Subscribe(imcpy.DesiredHeadingRate)
+    # def recv_headingrate(self, msg: imcpy.DesiredHeadingRate):
+    #     self.imc_DHR_to_ros(msg)
 
-    @Subscribe(imcpy.DesiredPitch)
-    def recv_pitch(self, msg: imcpy.DesiredPitch):
-        self.imc_DP_to_ros(msg)
+    # @Subscribe(imcpy.DesiredPitch)
+    # def recv_pitch(self, msg: imcpy.DesiredPitch):
+    #     self.imc_DP_to_ros(msg)
 
-    @Subscribe(imcpy.DesiredRoll)
-    def recv_roll(self, msg: imcpy.DesiredRoll):
-        self.imc_DR_to_ros(msg)
+    # @Subscribe(imcpy.DesiredRoll)
+    # def recv_roll(self, msg: imcpy.DesiredRoll):
+    #     self.imc_DR_to_ros(msg)
 
-    @Subscribe(imcpy.DesiredSpeed)
-    def recv_speed(self, msg: imcpy.DesiredSpeed):
-        self.imc_DS_to_ros(msg)
+    # @Subscribe(imcpy.DesiredSpeed)
+    # def recv_speed(self, msg: imcpy.DesiredSpeed):
+    #     self.imc_DS_to_ros(msg)
 
-    @Subscribe(imcpy.DesiredZ)
-    def recv_depth(self, msg: imcpy.DesiredZ):
-        self.imc_DZ_to_ros(msg)
+    # @Subscribe(imcpy.DesiredZ)
+    # def recv_depth(self, msg: imcpy.DesiredZ):
+    #     self.imc_DZ_to_ros(msg)
 
     @Subscribe(imcpy.EstimatedState)
     def recv_estate(self, msg: imcpy.EstimatedState):
         self.imc_EE_to_ros(msg)
 
-    @Subscribe(imcpy.Maneuver)
-    def recv_maneuver(self, msg: imcpy.Maneuver):
-        self.imc_M_to_ros(msg)
+    # @Subscribe(imcpy.Maneuver)
+    # def recv_maneuver(self, msg: imcpy.Maneuver):
+    #     self.imc_M_to_ros(msg)
 
     @Subscribe(imcpy.PlanControl)
     def recv_plan(self, msg: imcpy.PlanControl):
@@ -106,25 +107,25 @@ class Imc2Ros(DynamicActor):
     def recv_planspec(self, msg: imcpy.PlanSpecification):
         self.imc_PS_to_ros(msg)
 
-    @Subscribe(imcpy.PolygonVertex)
-    def recv_polygonvertex(self, msg: imcpy.PolygonVertex):
-        self.imc_PV_to_ros(msg)
+    # @Subscribe(imcpy.PolygonVertex)
+    # def recv_polygonvertex(self, msg: imcpy.PolygonVertex):
+    #     self.imc_PV_to_ros(msg)
 
-    @Subscribe(imcpy.RemoteState)
-    def recv_remotestate(self, msg: imcpy.RemoteState):
-        self.imc_RS_to_ros(msg)
+    # @Subscribe(imcpy.RemoteState)
+    # def recv_remotestate(self, msg: imcpy.RemoteState):
+    #     self.imc_RS_to_ros(msg)
 
-    @Subscribe(imcpy.SonarData)
-    def recv_sonar(self, msg: imcpy.SonarData):
-        self.imc_SD_to_ros(msg)
+    # @Subscribe(imcpy.SonarData)
+    # def recv_sonar(self, msg: imcpy.SonarData):
+    #     self.imc_SD_to_ros(msg)
 
-    @Subscribe(imcpy.VehicleState)
-    def recv_vstate(self, msg: imcpy.VehicleState):
-        self.imc_VS_to_ros(msg)
+    # @Subscribe(imcpy.VehicleState)
+    # def recv_vstate(self, msg: imcpy.VehicleState):
+    #     self.imc_VS_to_ros(msg)
     
-    @Subscribe(imcpy.Goto)
-    def recv_goto(self, msg: imcpy.Goto):
-        self.imc_Goto_to_ros(msg)
+    # @Subscribe(imcpy.Goto)
+    # def recv_goto(self, msg: imcpy.Goto):
+    #     self.imc_Goto_to_ros(msg)
 
     
 
@@ -201,6 +202,8 @@ class Imc2Ros(DynamicActor):
         msg.height = imc_msg.height
         self.EE_publisher_.publish(msg)
 
+        self.ros_node.get_logger().debug('Published Estimated State {}.'.format(imc_msg.x))
+
     def imc_M_to_ros(self, imc_msg: imcpy.Maneuver):
         msg = Maneuver()
         msg.maneuver_name = imc_msg.maneuver_name
@@ -263,7 +266,8 @@ class Imc2Ros(DynamicActor):
         # msg.plandb_state = imc_msg.plandb_state
 
         self.plan_db_publisher_.publish(msg)
-
+        
+        self.ros_node.get_logger().info('Port at {}'.format(self._port_imc))
         self.ros_node.get_logger().debug('Published Plan DB {}.'.format(imc_msg.plan_id))
     
     def imc_PDBI_to_ros(self, imc_msg: imcpy.PlanDBInformation):
@@ -376,31 +380,6 @@ class Imc2Ros(DynamicActor):
         self.goto_publisher_.publish(msg)
         self.ros_node.get_logger().debug('Published Goto {}.'.format(imc_msg.lat))
 
-
-    @Periodic(0.5)
-    def send_state(self):
-        try:
-            # self.ros_node.get_logger().info(self.__dict__)
-            # This function resolves the map of connected nodes
-            node = self.resolve_node_id(self.target_name)
-
-            # CReate a new logbook entry
-            log_book_entry = imcpy.LogBookEntry()
-            log_book_entry.type = 0
-            log_book_entry.timestamp = time.time()
-            log_book_entry.context = 'CONTROL_STATE'
-            log_book_entry.text = 'SURFACED' + str(time.time())
-
-            # print(log_book_entry)
-            # print(type(log_book_entry))
-
-            # Send the IMC message to the node
-            self.send(node, log_book_entry)
-            # self.ros_node.get_logger().info('message sent to node')
-
-        except KeyError as e:
-            # Target system is not connected
-            self.ros_node.get_logger().info('Target system is not connected.')
 
 
 def main():
