@@ -82,6 +82,7 @@ class FollowSingleRef(DynamicActor):
         # Send the IMC message to the node
         node = self.resolve_node_id(self.target_name)
         self.send(node, pc)
+        self.stop()
         self.ros_node.get_logger().info('***********Stop FollowRef command*************')
         return True
 
