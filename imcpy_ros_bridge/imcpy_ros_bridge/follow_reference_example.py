@@ -3,46 +3,50 @@ import logging, math, sys
 import imcpy
 from imcpy.actors import DynamicActor
 from imcpy.decorators import Subscribe, Periodic
-import rclpy
+import numpy as np
 
 logger = logging.getLogger('examples.FollowRef')
 
 
-class FollowRef(DynamicActor):
-    def __init__(self, target):
+class FollowSingleRef(DynamicActor):
+    def __init__(self, lat = 41.1854111111111, lon = -8.705886111111111, depth = 2., speed = 1.6, target_name='lauv-simulator-1'):
         super().__init__()
-        self.target = target
-        self.heartbeat.append(target)
         self.state = None
-        self.lat = 0.0
-        self.lon = 0.0
         self.last_ref = False
-        self.wp = [(50., 0.), (0.0, 50.), (-50, 0.), (0., -50.)]  # North/east offsets for waypoints
-        self.wp_next = 0
+
+        self.lat = lat
+        self.lon = lon 
+        self.depth = depth
+        self.speed = speed
+        # IMC STUFF
+        self.target_name = target_name
+        # This list contains the target systems to maintain communications with
+        self.heartbeat.append(target_name)        
+        # This command starts the asyncio event loop
+        self.run()
 
     def send_reference(self, node_id, final=False):
         """
         After the FollowReferenceManeuver is started, references must be sent continously
         """
+
+        node = self.resolve_node_id(node_id)
         try:
-            next_coord = self.wp[self.wp_next % len(self.wp)]
-            lat, lon = imcpy.coordinates.WGS84.displace(self.lat, self.lon, n=next_coord[0], e=next_coord[1])
-            self.wp_next += 1
 
             node = self.resolve_node_id(node_id)
             r = imcpy.Reference()
-            r.lat = lat  # Target waypoint
-            r.lon = lon  # Target waypoint
+            r.lat = self.lat*np.pi/180  # Target waypoint
+            r.lon = self.lon*np.pi/180  # Target waypoint
 
             # Assign z
             dz = imcpy.DesiredZ()
-            dz.value = 0.0
+            dz.value = self.depth
             dz.z_units = imcpy.ZUnits.DEPTH
             r.z = dz
 
             # Assign the speed
             ds = imcpy.DesiredSpeed()
-            ds.value = 1.6
+            ds.value = self.speed
             ds.speed_units = imcpy.SpeedUnits.METERS_PS
             r.speed = ds
 
@@ -53,9 +57,24 @@ class FollowRef(DynamicActor):
             logger.info('Sending reference')
             self.last_ref = r
             self.send(node, r)
+            return False
         except KeyError:
             pass
 
+    def stop_Plan(self):
+        # Stop plan
+        pc = imcpy.PlanControl()
+        pc.type = imcpy.PlanControl.TypeEnum.REQUEST
+        pc.op = imcpy.PlanControl.OperationEnum.STOP
+        pc.plan_id = 'FollowReference'
+
+        # Send the IMC message to the node
+        node = self.resolve_node_id(self.target_name)
+        self.send(node, pc)
+        self.stop()
+        logger.info('***********Stop FollowRef command*************')
+        return True
+    
     def is_from_target(self, msg):
         """
         Check that incoming message is from the target system
@@ -67,21 +86,23 @@ class FollowRef(DynamicActor):
             return False
 
     @Periodic(10)
-    def init_followref(self):
+    def send_FollowReference(self):
         """
         If target is connected, start the FollowReferenceManeuver
         """
         if not self.state:
-            # Check if target system is connected
             try:
-                node = self.resolve_node_id(self.target)
+                # This function resolves the map of connected nodes
+                node = self.resolve_node_id(self.target_name)
+
+                # Create FollowReference msg
                 fr = imcpy.FollowReference()
                 fr.control_src = 0xFFFF  # Controllable from all IMC adresses
                 fr.control_ent = 0xFF  # Controllable from all entities
                 fr.timeout = 10.0  # Maneuver stops when time since last Reference message exceeds this value
                 fr.loiter_radius = 0  # Default loiter radius when waypoint is reached
                 fr.altitude_interval = 0
-
+                
                 # Add to PlanManeuver message
                 pman = imcpy.PlanManeuver()
                 pman.data = fr
@@ -101,67 +122,57 @@ class FollowRef(DynamicActor):
                 pc.plan_id = 'FollowReference'
                 pc.arg = spec
 
+                # Send the IMC message to the node
                 self.send(node, pc)
+                logger.info('***********Started FollowRef command*************')
+                return False
 
-                logger.info('Started FollowRef command')
-            except KeyError:
-                pass
-
-    @Subscribe(imcpy.EstimatedState)
-    def recv_estate(self, msg):
-        if self.is_from_target(msg):
-            self.lat, self.lon, _ = imcpy.coordinates.toWGS84(msg)
+            except KeyError as e:
+                # Target system is not connected
+                logger.info('Could not deliver GOTO.')
+                return False
 
     @Subscribe(imcpy.FollowRefState)
-    def recv_followrefstate(self, msg: imcpy.FollowRefState):
-        if not self.is_from_target(msg):
-            return
+    def recv_plandbstate(self, msg: imcpy.FollowRefState):
 
-        logger.info('Received FollowRefState')
         self.state = msg.state
-
         if msg.state == imcpy.FollowRefState.StateEnum.GOTO:
             # In goto maneuver
             logger.info('Goto')
             if msg.proximity & imcpy.FollowRefState.ProximityBits.XY_NEAR:
                 # Near XY - send next reference
-                logger.info('-- Near XY')
-                self.send_reference(node_id=self.target)
+                logger.info('-------------- Near XY')
+                self.last_ref = False
+                self.stop_Plan()
         elif msg.state in (imcpy.FollowRefState.StateEnum.LOITER, imcpy.FollowRefState.StateEnum.HOVER, imcpy.FollowRefState.StateEnum.WAIT):
             # Loitering/hovering/waiting - send next reference
             logger.info('Waiting')
-            self.send_reference(node_id=self.target)
+            self.send_reference(node_id=self.target_name)
         elif msg.state == imcpy.FollowRefState.StateEnum.ELEVATOR:
             # Moving in z-direction after reaching reference cylinder
             logger.info('Elevator')
         elif msg.state == imcpy.FollowRefState.StateEnum.TIMEOUT:
             # Controlling system timed out
             logger.info('Timeout')
+        return False
 
-    @Periodic(1.0)
+    @Subscribe(imcpy.EstimatedState)
+    def recv_estate(self, msg: imcpy.EstimatedState):
+        return False 
+    
+    @Periodic(5.0)
     def periodic_ref(self):
         if self.last_ref:
             try:
-                self.send(self.target, self.last_ref)
+                self.send(self.target_name, self.last_ref)
             except KeyError:
                 pass
+        return False
 
 def main():
-    #ROS stuff
-    rclpy.init()
-    node = rclpy.create_node('follow_reference_example')
-    
-
-    # IMCPY stuff
-    # Setup logging level and console output
+    print('Hi from ros2imc.')
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-
-    # Run actor
-    x = FollowRef('lauv-simulator-1')
-    x.run()
-    
-    rclpy.spin(node)
-    rclpy.shutdown()
+    ros2imc = FollowSingleRef(target_name='lauv-simulator-1')
 
 if __name__ == '__main__':
     main()
