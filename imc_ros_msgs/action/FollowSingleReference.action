@@ -12,7 +12,7 @@ uint8 speed_unitss
 ---
 
 # Result
-bool reference_reached
+string message
 ---
 # Feedback
-uint8 state
+string state

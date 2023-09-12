@@ -174,56 +174,7 @@ class GenericServer(object):
         Args:
             goal_handle (:class:`~rclpy.action.server.ServerGoalHandle`): the goal handle of the executing action
         """
-        # goal.details (e.g. pose) = don't care
-        self.node.get_logger().info("executing a goal")
-        increment = 100 / (self.frequency * self.duration)
-        def initialize_imcpy_task():
-            dune_actor = FollowSingleRef(target_name='lauv-simulator-1')
-            dune_actor.run_async_function()
-
-        with self.goal_lock:
-            thread = threading.Thread(target = initialize_imcpy_task)
-            thread.start()
-            thread.join() # Wait for the thread to finish
-            
-        while True:
-            # TODO: use a rate when they have it
-            time.sleep(1.0 / self.frequency)
-            self.percent_completed += increment
-            with self.goal_lock:
-                if goal_handle.is_active:
-                    if goal_handle.is_cancel_requested:
-                        result = self.generate_cancelled_result()
-                        message = "goal cancelled at {percentage:.2f}%%".format(
-                            percentage=self.percent_completed)
-                        self.node.get_logger().info(message)
-                        goal_handle.canceled()
-                        return result
-                    elif goal_handle.goal_id != self.goal_handle.goal_id:
-                        result = self.generate_preempted_result()
-                        message = "goal pre-empted at {percentage:.2f}%%".format(
-                            percentage=self.percent_completed)
-                        self.node.get_logger().info(message)
-                        goal_handle.abort()
-                        return result
-                    elif self.percent_completed >= 100.0:
-                        self.percent_completed = 100.0
-                        self.node.get_logger().info("sending feedback 100%%")
-                        result = self.generate_success_result()
-                        message = "goal executed with success"
-                        self.node.get_logger().info(message)
-                        goal_handle.succeed()
-                        return result
-                    else:
-                        self.node.get_logger().info("sending feedback {percentage:.2f}%%".format(
-                            percentage=self.percent_completed))
-                        goal_handle.publish_feedback(
-                            self.generate_feedback_message()
-                        )
-                else:  # ! active
-                    self.node.get_logger().info("goal is no longer active, aborting")
-                    result = self.action_type.Result()
-                    return result
+        raise NotImplementedError
 
     def handle_accepted_callback(self, goal_handle):
         self.node.get_logger().info("handle accepted")

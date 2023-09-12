@@ -23,8 +23,9 @@ class FollowSingleRef(DynamicActor):
     
 
     def __init__(self, goal_handle = None, lat = 41.1854111111111, lon = -8.705886111111111, depth = 2., speed = 1.6, node_name='imcpy_single_ref', target_name='lauv-simulator-1'):
-        super().__init__()  
-        self.ros_node = Node(node_name)
+        super().__init__() 
+        self.name = node_name+str(int(time.time()*1000)) 
+        self.ros_node = Node(self.name)
         self.goal_handle = None
         if goal_handle:
             self.goal_handle = goal_handle
@@ -41,9 +42,9 @@ class FollowSingleRef(DynamicActor):
         # IMC STUFF
         self.target_name = target_name
         # This list contains the target systems to maintain communications with
-        self.heartbeat.append(target_name)        
-        # This command starts the asyncio event loop
-        # self.run()
+        self.heartbeat.append(target_name)       
+
+        self.near = False
 
     def run_async_function(self):
         
@@ -51,8 +52,6 @@ class FollowSingleRef(DynamicActor):
         pending = asyncio.all_tasks(self._loop)
         self.ros_node.get_logger().info('')
         for task in pending:
-                # task.cancel()
-                # Now we should await task to execute it's cancellation.
                 # Cancelled task raises asyncio.CancelledError that we can suppress when canceling
                 with suppress(asyncio.CancelledError):
                     self._loop.run_until_complete(task)
@@ -87,37 +86,6 @@ class FollowSingleRef(DynamicActor):
         # Subscriptions has been collected from all decorators
         # Add asyncio datagram endpoints to event loop
         self._start_subscriptions()
-
-    def run(self):
-        """
-        Starts the event loop.
-        """
-        self.t_start = time.time()
-
-        if self.log_enable:
-            self._log_start()
-
-        # Run setup if it hasn't been done yet
-        if not self._loop:
-            self._setup_event_loop()
-
-        # Start event loop
-        try:
-            self._loop.run_forever()
-        except KeyboardInterrupt:
-            pending = asyncio.all_tasks(self._loop)
-            for task in pending:
-                task.cancel()
-                # Now we should await task to execute it's cancellation.
-                # Cancelled task raises asyncio.CancelledError that we can suppress when canceling
-                with suppress(asyncio.CancelledError):
-                    self._loop.run_until_complete(task)
-        finally:
-            self._loop.close()
-
-            # Finish IMC log
-            if self.log_enable:
-                self._log_stop()
 
     def send_reference(self, node_id, final=False):
         """
@@ -161,7 +129,7 @@ class FollowSingleRef(DynamicActor):
         pc = imcpy.PlanControl()
         pc.type = imcpy.PlanControl.TypeEnum.REQUEST
         pc.op = imcpy.PlanControl.OperationEnum.STOP
-        pc.plan_id = 'FollowReference'
+        pc.plan_id = self.name
 
         # Send the IMC message to the node
         node = self.resolve_node_id(self.target_name)
@@ -192,25 +160,26 @@ class FollowSingleRef(DynamicActor):
                 # Add to PlanManeuver message
                 pman = imcpy.PlanManeuver()
                 pman.data = fr
-                pman.maneuver_id = 'FollowReferenceManeuver'
+                pman.maneuver_id = self.name
 
                 # Add to PlanSpecification
                 spec = imcpy.PlanSpecification()
-                spec.plan_id = 'FollowReference'
+                spec.plan_id = self.name
                 spec.maneuvers.append(pman)
-                spec.start_man_id = 'FollowReferenceManeuver'
+                spec.start_man_id = self.name
                 spec.description = 'A test plan sent from imcpy'
 
                 # Start plan
                 pc = imcpy.PlanControl()
                 pc.type = imcpy.PlanControl.TypeEnum.REQUEST
                 pc.op = imcpy.PlanControl.OperationEnum.START
-                pc.plan_id = 'FollowReference'
+                pc.plan_id = self.name
                 pc.arg = spec
 
                 # Send the IMC message to the node
                 self.send(node, pc)
                 self.ros_node.get_logger().info('***********Started FollowRef command*************')
+                self.send_reference(node_id=self.target_name)
                 return False
 
             except KeyError as e:
@@ -223,27 +192,29 @@ class FollowSingleRef(DynamicActor):
     def recv_plandbstate(self, msg: imcpy.FollowRefState):
         if self.goal_handle:
             feedback_msg = FollowSingleReference.Feedback()
-            self.ros_node.get_logger().info(str(msg.state))
             feedback_msg.state = 0
             self.goal_handle.publish_feedback(feedback_msg)
 
         self.state = msg.state
+
         if msg.state == imcpy.FollowRefState.StateEnum.GOTO:
             # In goto maneuver
-            self.ros_node.get_logger().info('Goto')
+            # self.ros_node.get_logger().info('Goto')
             if msg.proximity & imcpy.FollowRefState.ProximityBits.XY_NEAR:
+                self.near = True
                 # Near XY - send next reference
                 self.ros_node.get_logger().info('-------------- Near XY')
                 self.last_ref = False
                 self.stop_Plan()
         elif msg.state in (imcpy.FollowRefState.StateEnum.LOITER, imcpy.FollowRefState.StateEnum.HOVER):
             # Loitering/hovering/waiting - send next reference
-            self.ros_node.get_logger().info('Point reached: Loiter/Hover')
+            # self.ros_node.get_logger().info('Point reached: Loiter/Hover')
             time.sleep(1)
-            self.send_reference(node_id=self.target_name)
+            self.near = True
+            self.stop_Plan()
         elif msg.state == imcpy.FollowRefState.StateEnum.WAIT:
             # Loitering/hovering/waiting - send next reference
-            self.ros_node.get_logger().info('Waiting')
+            # self.ros_node.get_logger().info('Waiting')
             time.sleep(1)
             self.send_reference(node_id=self.target_name)
         
