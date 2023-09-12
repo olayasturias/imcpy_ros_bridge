@@ -135,6 +135,7 @@ class FollowSingleRef(DynamicActor):
         node = self.resolve_node_id(self.target_name)
         self.send(node, pc)
         self.stop()
+        self.ros_node.destroy_node()
         self.ros_node.get_logger().info('***********Stop FollowRef command*************')
         return True
 
@@ -199,7 +200,7 @@ class FollowSingleRef(DynamicActor):
 
         if msg.state == imcpy.FollowRefState.StateEnum.GOTO:
             # In goto maneuver
-            # self.ros_node.get_logger().info('Goto')
+            self.ros_node.get_logger().info('Goto')
             if msg.proximity & imcpy.FollowRefState.ProximityBits.XY_NEAR:
                 self.near = True
                 # Near XY - send next reference
@@ -208,13 +209,13 @@ class FollowSingleRef(DynamicActor):
                 self.stop_Plan()
         elif msg.state in (imcpy.FollowRefState.StateEnum.LOITER, imcpy.FollowRefState.StateEnum.HOVER):
             # Loitering/hovering/waiting - send next reference
-            # self.ros_node.get_logger().info('Point reached: Loiter/Hover')
+            self.ros_node.get_logger().info('Point reached: Loiter/Hover')
             time.sleep(1)
             self.near = True
             self.stop_Plan()
         elif msg.state == imcpy.FollowRefState.StateEnum.WAIT:
             # Loitering/hovering/waiting - send next reference
-            # self.ros_node.get_logger().info('Waiting')
+            self.ros_node.get_logger().info('Waiting')
             time.sleep(1)
             self.send_reference(node_id=self.target_name)
         

@@ -87,20 +87,24 @@ class FollowSingleReferenceServer(GenericServer):
         self.node.get_logger().info("executing a goal")
         dune_actor = FollowSingleRef(lat = goal_handle._goal_request.lat, lon = goal_handle._goal_request.lon, depth = goal_handle._goal_request.z, speed= goal_handle._goal_request.speed, target_name='lauv-simulator-1')
         def initialize_imcpy_task():
+            self.node.get_logger().info("Initializing async functions")
             dune_actor.run_async_function()
             event.set()
 
         # Create an event for synchronization
         event = threading.Event()
         # Create a new thread and initialize the class instance within it
+        self.node.get_logger().info("Initialize thread")
         thread = threading.Thread(target = initialize_imcpy_task)
         thread.daemon = True  # Set the thread as a daemon
         thread.start()
+        self.node.get_logger().info("Start thread")
         # DO STUFF MEANWHILE
         continue_server = True
         while continue_server:
             with self.goal_lock:
                 time.sleep(1)
+                self.node.get_logger().info("Running tree stuff")
                 state = dune_actor.state
                 near = dune_actor.near
                 if goal_handle.is_active:
