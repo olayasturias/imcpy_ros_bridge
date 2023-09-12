@@ -15,6 +15,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
+    package_data={package_name: ['tree_actions/*']},
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='olaya',
@@ -24,7 +25,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'followSingleRef= imcpy_trees.follow_single_reference_tree:main'
+            'followsingleref_server= imcpy_trees.tree_actions.follow_single_reference:main',
+            'followSingleRef= imcpy_trees.follow_single_reference_tree:main',
+            'square= imcpy_trees.square_tree:main'
         ],
     },
 )

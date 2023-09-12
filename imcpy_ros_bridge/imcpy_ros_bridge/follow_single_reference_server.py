@@ -22,7 +22,7 @@ class FollowSingleReferenceActionServer(Node):
         feedback_msg = FollowSingleReference.Feedback()
         feedback_msg.state = 0
 
-        dune_actor = FollowSingleRef(node_name='actionnode', target_name='lauv-simulator-1')
+        dune_actor = FollowSingleRef(goal_handle=goal_handle, node_name='actionnode', lat = goal_handle._goal_request.lat, lon = goal_handle._goal_request.lon, depth = goal_handle._goal_request.z, speed= goal_handle._goal_request.speed, target_name='lauv-simulator-1')
 
         self.get_logger().info('Feedback: {0}'.format(feedback_msg.state))
         goal_handle.publish_feedback(feedback_msg)

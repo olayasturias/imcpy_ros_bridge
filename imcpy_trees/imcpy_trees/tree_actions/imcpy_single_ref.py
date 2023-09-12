@@ -1,6 +1,10 @@
 import rclpy
 import logging, sys
 import time
+import asyncio
+import inspect
+from contextlib import suppress
+
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from imc_ros_msgs.msg import EstimatedState
@@ -18,7 +22,7 @@ from imc_ros_msgs.action import FollowSingleReference
 class FollowSingleRef(DynamicActor):
     
 
-    def __init__(self, goal_handle = None, lat = 41.1854111111111, lon = -8.705886111111111, depth = 2., speed = 1.6, node_name='ros2imc', target_name='lauv-simulator-1'):
+    def __init__(self, goal_handle = None, lat = 41.1854111111111, lon = -8.705886111111111, depth = 2., speed = 1.6, node_name='imcpy_single_ref', target_name='lauv-simulator-1'):
         super().__init__()  
         self.ros_node = Node(node_name)
         self.goal_handle = None
@@ -39,7 +43,81 @@ class FollowSingleRef(DynamicActor):
         # This list contains the target systems to maintain communications with
         self.heartbeat.append(target_name)        
         # This command starts the asyncio event loop
-        self.run()
+        # self.run()
+
+    def run_async_function(self):
+        
+        self._setup_event_loop()
+        pending = asyncio.all_tasks(self._loop)
+        self.ros_node.get_logger().info('')
+        for task in pending:
+                # task.cancel()
+                # Now we should await task to execute it's cancellation.
+                # Cancelled task raises asyncio.CancelledError that we can suppress when canceling
+                with suppress(asyncio.CancelledError):
+                    self._loop.run_until_complete(task)
+                    
+    def _setup_event_loop(self):
+        """
+        Setup of event loop and decorated functions
+        """
+        # Add event loop to instance
+        if not self._loop:
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+
+        decorated = [(name, method) for name, method in inspect.getmembers(self) if hasattr(method, '_decorators')]
+        for name, method in decorated:
+            for decorator in method._decorators:
+                decorator.add_event(self._loop, self, method)
+
+                if type(decorator) is Subscribe:
+                    # Collect subscribed message types for each function
+                    for msg_type in decorator.subs:
+                        try:
+                            self._subs[msg_type].append(method)
+                        except (KeyError, AttributeError):
+                            self._subs[msg_type] = [method]
+
+        # Sort subscriptions by position in inheritance hierarchy (parent classes are called first)
+        cls_hier = [x.__qualname__ for x in inspect.getmro(type(self))]
+        for msg_type, methods in self._subs.items():
+            methods.sort(key=lambda x: -cls_hier.index(x.__qualname__.split('.')[0]))
+
+        # Subscriptions has been collected from all decorators
+        # Add asyncio datagram endpoints to event loop
+        self._start_subscriptions()
+
+    def run(self):
+        """
+        Starts the event loop.
+        """
+        self.t_start = time.time()
+
+        if self.log_enable:
+            self._log_start()
+
+        # Run setup if it hasn't been done yet
+        if not self._loop:
+            self._setup_event_loop()
+
+        # Start event loop
+        try:
+            self._loop.run_forever()
+        except KeyboardInterrupt:
+            pending = asyncio.all_tasks(self._loop)
+            for task in pending:
+                task.cancel()
+                # Now we should await task to execute it's cancellation.
+                # Cancelled task raises asyncio.CancelledError that we can suppress when canceling
+                with suppress(asyncio.CancelledError):
+                    self._loop.run_until_complete(task)
+        finally:
+            self._loop.close()
+
+            # Finish IMC log
+            if self.log_enable:
+                self._log_stop()
 
     def send_reference(self, node_id, final=False):
         """
@@ -231,10 +309,10 @@ def main():
     print('Hi from ros2imc.')
     rclpy.init()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-    ros2imc = FollowSingleRef(node_name='ros2imc', target_name='lauv-simulator-1')
+    imcpysingleref = FollowSingleRef(node_name='imcpy_single_ref', target_name='lauv-simulator-1')
 
 
-    ros2imc.ros_node.destroy_node()
+    imcpysingleref.ros_node.destroy_node()
     rclpy.shutdown()
 
 

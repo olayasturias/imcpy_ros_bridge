@@ -130,10 +130,11 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
     # Worker Tasks
     scan = py_trees.composites.Sequence(name="MovetoNext", memory=True)
 
-    # scanning = py_trees.composites.Parallel(
-    #     name="FollowNext",
-    #     policy=py_trees.common.ParallelPolicy.SuccessOnOne()
-    # )
+    goal1 = imc_ros_actions.FollowSingleReference.Goal()
+    goal1.lat = 41.18541112
+    goal1.lon = -8.70588612
+    goal1.z = 2.
+    goal1.speed = 1.6
 
     goal2 = imc_ros_actions.FollowSingleReference.Goal()
     goal2.lat = 41.18469722
@@ -141,20 +142,70 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
     goal2.z = 2.
     goal2.speed = 1.6
 
-    scan_rotate = py_trees_ros.actions.ActionClient(
-        name="FollowSingleReference",
+    goal3 = imc_ros_actions.FollowSingleReference.Goal()
+    goal3.lat = 41.18413888
+    goal3.lon = -8.70608888
+    goal3.z = 2.
+    goal3.speed = 1.6
+
+    goal4 = imc_ros_actions.FollowSingleReference.Goal()
+    goal4.lat = 41.18485
+    goal4.lon = -8.70683055
+    goal4.z = 2.
+    goal4.speed = 1.6
+
+    goal5 = imc_ros_actions.FollowSingleReference.Goal()
+    goal5.lat = 41.18541112
+    goal5.lon = -8.70588612
+    goal5.z = 2.
+    goal5.speed = 1.6
+
+    goal1_action = py_trees_ros.actions.ActionClient(
+        name="FollowSingleReference_1",
         action_type=imc_ros_actions.FollowSingleReference,
         action_name="FollowSingleReference",
-        action_goal = goal2,  # noqa
+        action_goal = goal1,  # noqa
         generate_feedback_message=lambda msg: "{:d}".format(msg.feedback.state),
         wait_for_server_timeout_sec=100
-    ) 
-    
+    )
+
+    # goal2_action = py_trees_ros.actions.ActionClient(
+    #     name="FollowSingleReference_2",
+    #     action_type=imc_ros_actions.FollowSingleReference,
+    #     action_name="FollowSingleReference",
+    #     action_goal = goal2,  # noqa
+    #     generate_feedback_message=lambda msg: "{:d}".format(msg.feedback.state),
+    #     wait_for_server_timeout_sec=100
+    # ) 
+    # goal3_action = py_trees_ros.actions.ActionClient(
+    #     name="FollowSingleReference_3",
+    #     action_type=imc_ros_actions.FollowSingleReference,
+    #     action_name="FollowSingleReference",
+    #     action_goal = goal3,  # noqa
+    #     generate_feedback_message=lambda msg: "{:d}".format(msg.feedback.state),
+    #     wait_for_server_timeout_sec=100
+    # ) 
+    # goal4_action = py_trees_ros.actions.ActionClient(
+    #     name="FollowSingleReference_4",
+    #     action_type=imc_ros_actions.FollowSingleReference,
+    #     action_name="FollowSingleReference",
+    #     action_goal = goal4,  # noqa
+    #     generate_feedback_message=lambda msg: "{:d}".format(msg.feedback.state),
+    #     wait_for_server_timeout_sec=100
+    # ) 
+    # goal5_action = py_trees_ros.actions.ActionClient(
+    #     name="FollowSingleReference_5",
+    #     action_type=imc_ros_actions.FollowSingleReference,
+    #     action_name="FollowSingleReference",
+    #     action_goal = goal5,  # noqa
+    #     generate_feedback_message=lambda msg: "{:d}".format(msg.feedback.state),
+    #     wait_for_server_timeout_sec=100
+    # ) 
     root.add_child(topics2bb)
     topics2bb.add_child(estimatedState2bb)
     root.add_child(tasks)
     tasks.add_children([scan, idle])
-    scan.add_children([scan_rotate])
+    scan.add_children([goal1_action])
     # scanning.add_children([scan_rotate])
 
     return root
@@ -184,7 +235,7 @@ def main():
         rclpy.try_shutdown()
         sys.exit(1)
 
-    tree.tick_tock(1000)
+    tree.tick()
 
 
     tree.node.get_logger().info('REACHING AFTER TICKING')
