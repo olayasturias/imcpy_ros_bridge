@@ -21,13 +21,13 @@ def generate_launch_description():
                 output='screen',
                 emulate_tty=True,
             ),
-        Node(
-            namespace='lauv_simulator_1',
-            package='imcpy_ros_bridge',
-            executable="imc2ros",
-            output='screen',
-            emulate_tty=True,
-            arguments=['--ros-args', '--log-level', 'DEBUG']
+        launch_ros.actions.Node(
+                namespace='lauv_simulator_1',
+                package='imcpy_trees',
+                executable="followsingleref_server",
+                output='screen',
+                emulate_tty=True,
+                arguments=['--ros-args', '--log-level', 'DEBUG']
             ),    
         ]
     )

@@ -34,6 +34,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PlanManeuver.msg"
   "msg/Maneuver.msg"
   "msg/PolygonVertex.msg"
+  "msg/FollowRefState.msg"
+  "msg/FollowReference.msg"
+  "msg/Reference.msg"
   DEPENDENCIES std_msgs sensor_msgs geometry_msgs
  )
 

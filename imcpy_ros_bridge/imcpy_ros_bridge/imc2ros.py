@@ -1,8 +1,8 @@
 import rclpy
 import time
 from rclpy.node import Node
-from imc_ros_msgs.msg import DesiredHeading, DesiredHeadingRate, DesiredPitch, DesiredRoll, DesiredSpeed, DesiredZ
-from imc_ros_msgs.msg import EstimatedState, Maneuver, PolygonVertex, RemoteState, SonarData, VehicleState, Goto
+from imc_ros_msgs.msg import DesiredHeading, DesiredHeadingRate, DesiredPitch, DesiredRoll, DesiredSpeed, DesiredZ, Reference
+from imc_ros_msgs.msg import EstimatedState, Maneuver, PolygonVertex, RemoteState, SonarData, VehicleState, Goto, FollowRefState, FollowReference
 from imc_ros_msgs.msg import PlanControl, PlanControlState, PlanDB, PlanDBInformation,PlanDBState, PlanManeuver, PlanSpecification
 from geometry_msgs.msg import PoseStamped
 
@@ -18,6 +18,7 @@ from imcpy.network.utils import get_interfaces
 class Imc2Ros(DynamicActor):
     def __init__(self, node_name='imc2ros', target_name='lauv-simulator-1'):
         super().__init__()  
+        self.name = node_name
         self.ros_node = Node(node_name)
 
         # IMC STUFF
@@ -25,63 +26,69 @@ class Imc2Ros(DynamicActor):
         # This list contains the target systems to maintain communications with
         self.heartbeat.append(target_name)
 
-        # ROS STUFF
-        self.desired_heading_publisher_     = self.ros_node.create_publisher(DesiredHeading,    'desired_heading', 10)
-        self.desired_heading_rate_publisher_= self.ros_node.create_publisher(DesiredHeadingRate,'desired_heading_rate', 10)
-        self.desired_pitch_publisher_       = self.ros_node.create_publisher(DesiredPitch,      'desired_pitch',10)
-        self.desired_roll_publisher_        = self.ros_node.create_publisher(DesiredRoll,       'desired_roll',10)
-        self.desired_speed_publisher_       = self.ros_node.create_publisher(DesiredSpeed,      'desired_speed',10)
-        self.desired_z_publisher_           = self.ros_node.create_publisher(DesiredZ,          'desired_Z',10)
-        self.pose_publisher_                = self.ros_node.create_publisher(PoseStamped,       'base_link', 10)
-        self.EE_publisher_                  = self.ros_node.create_publisher(EstimatedState,    'estimated_state', 10)
-        self.maneuver_publisher_            = self.ros_node.create_publisher(Maneuver,          'maneuver',10)
-        self.plan_control_publisher_        = self.ros_node.create_publisher(PlanControl,       'plan_control',10)
-        self.plan_control_state_publisher_  = self.ros_node.create_publisher(PlanControlState,  'plan_control_state',10)
-        self.plan_db_publisher_             = self.ros_node.create_publisher(PlanDB,            'plan_DB',10)
-        self.plan_db_information_publisher_ = self.ros_node.create_publisher(PlanDBInformation, 'plan_DB_information',10)
-        self.plan_db_state_publisher_       = self.ros_node.create_publisher(PlanDBState,       'plan_db_state',10)
-        self.plan_maneuver_publisher_       = self.ros_node.create_publisher(PlanManeuver,      'plan_maneuver',10)
-        self.plan_specification_publisher_  = self.ros_node.create_publisher(PlanSpecification, 'plan_specification',10)
-        self.polygon_vertex_publisher_      = self.ros_node.create_publisher(PolygonVertex,     'polygon_vertex',10)
-        self.remote_state_publisher_        = self.ros_node.create_publisher(RemoteState,       'remote_state',10)
-        self.sonar_data_publisher_          = self.ros_node.create_publisher(SonarData,         'sonar_data',10)
-        self.vehicle_state_publisher_       = self.ros_node.create_publisher(VehicleState,      'vehicle_state',10)
-        self.goto_publisher_                = self.ros_node.create_publisher(Goto,              'goto',10)  
+        # Messages received from IMC and published to ROS
+        self.desired_heading_publisher_     = self.ros_node.create_publisher(DesiredHeading,    'from_imc/desired_heading', 10)
+        self.desired_heading_rate_publisher_= self.ros_node.create_publisher(DesiredHeadingRate,'from_imc/desired_heading_rate', 10)
+        self.desired_pitch_publisher_       = self.ros_node.create_publisher(DesiredPitch,      'from_imc/desired_pitch',10)
+        self.desired_roll_publisher_        = self.ros_node.create_publisher(DesiredRoll,       'from_imc/desired_roll',10)
+        self.desired_speed_publisher_       = self.ros_node.create_publisher(DesiredSpeed,      'from_imc/desired_speed',10)
+        self.desired_z_publisher_           = self.ros_node.create_publisher(DesiredZ,          'from_imc/desired_Z',10)
+        self.pose_publisher_                = self.ros_node.create_publisher(PoseStamped,       'from_imc/base_link', 10)
+        self.EE_publisher_                  = self.ros_node.create_publisher(EstimatedState,    'from_imc/estimated_state', 10)
+        self.maneuver_publisher_            = self.ros_node.create_publisher(Maneuver,          'from_imc/maneuver',10)
+        self.plan_control_publisher_        = self.ros_node.create_publisher(PlanControl,       'from_imc/plan_control',10)
+        self.plan_control_state_publisher_  = self.ros_node.create_publisher(PlanControlState,  'from_imc/plan_control_state',10)
+        self.plan_db_publisher_             = self.ros_node.create_publisher(PlanDB,            'from_imc/plan_DB',10)
+        self.plan_db_information_publisher_ = self.ros_node.create_publisher(PlanDBInformation, 'from_imc/plan_DB_information',10)
+        self.plan_db_state_publisher_       = self.ros_node.create_publisher(PlanDBState,       'from_imc/plan_db_state',10)
+        self.plan_maneuver_publisher_       = self.ros_node.create_publisher(PlanManeuver,      'from_imc/plan_maneuver',10)
+        self.plan_specification_publisher_  = self.ros_node.create_publisher(PlanSpecification, 'from_imc/plan_specification',10)
+        self.polygon_vertex_publisher_      = self.ros_node.create_publisher(PolygonVertex,     'from_imc/polygon_vertex',10)
+        self.remote_state_publisher_        = self.ros_node.create_publisher(RemoteState,       'from_imc/remote_state',10)
+        self.sonar_data_publisher_          = self.ros_node.create_publisher(SonarData,         'from_imc/sonar_data',10)
+        self.vehicle_state_publisher_       = self.ros_node.create_publisher(VehicleState,      'from_imc/vehicle_state',10)
+        self.goto_publisher_                = self.ros_node.create_publisher(Goto,              'from_imc/goto',10) 
+        self.follow_ref_state_publisher_    = self.ros_node.create_publisher(FollowRefState,    'from_imc/followref_state',10)
+        
+        # Messages received from ROS and sent to IMC
+        self.follow_reference_subscriber_ = self.create_subscription(FollowReference, 'to_imc/follow_reference', self.followreference_callback, 10)
+        self.reference_subscriber_        = self.create_subscription(Reference,       'to_imc/reference',        self.reference_callback, 10)
+        
         # This command starts the asyncio event loop
         self.run()
         self.ros_node.get_logger().info('Port at {}'.format(self._port_imc))
 
-    # @Subscribe(imcpy.DesiredHeading)
-    # def recv_heading(self, msg: imcpy.DesiredHeading):
-    #     self.imc_DH_to_ros(msg)
+    @Subscribe(imcpy.DesiredHeading)
+    def recv_heading(self, msg: imcpy.DesiredHeading):
+        self.imc_DH_to_ros(msg)
 
-    # @Subscribe(imcpy.DesiredHeadingRate)
-    # def recv_headingrate(self, msg: imcpy.DesiredHeadingRate):
-    #     self.imc_DHR_to_ros(msg)
+    @Subscribe(imcpy.DesiredHeadingRate)
+    def recv_headingrate(self, msg: imcpy.DesiredHeadingRate):
+        self.imc_DHR_to_ros(msg)
 
-    # @Subscribe(imcpy.DesiredPitch)
-    # def recv_pitch(self, msg: imcpy.DesiredPitch):
-    #     self.imc_DP_to_ros(msg)
+    @Subscribe(imcpy.DesiredPitch)
+    def recv_pitch(self, msg: imcpy.DesiredPitch):
+        self.imc_DP_to_ros(msg)
 
-    # @Subscribe(imcpy.DesiredRoll)
-    # def recv_roll(self, msg: imcpy.DesiredRoll):
-    #     self.imc_DR_to_ros(msg)
+    @Subscribe(imcpy.DesiredRoll)
+    def recv_roll(self, msg: imcpy.DesiredRoll):
+        self.imc_DR_to_ros(msg)
 
-    # @Subscribe(imcpy.DesiredSpeed)
-    # def recv_speed(self, msg: imcpy.DesiredSpeed):
-    #     self.imc_DS_to_ros(msg)
+    @Subscribe(imcpy.DesiredSpeed)
+    def recv_speed(self, msg: imcpy.DesiredSpeed):
+        self.imc_DS_to_ros(msg)
 
-    # @Subscribe(imcpy.DesiredZ)
-    # def recv_depth(self, msg: imcpy.DesiredZ):
-    #     self.imc_DZ_to_ros(msg)
+    @Subscribe(imcpy.DesiredZ)
+    def recv_depth(self, msg: imcpy.DesiredZ):
+        self.imc_DZ_to_ros(msg)
 
     @Subscribe(imcpy.EstimatedState)
     def recv_estate(self, msg: imcpy.EstimatedState):
         self.imc_EE_to_ros(msg)
 
-    # @Subscribe(imcpy.Maneuver)
-    # def recv_maneuver(self, msg: imcpy.Maneuver):
-    #     self.imc_M_to_ros(msg)
+    @Subscribe(imcpy.Maneuver)
+    def recv_maneuver(self, msg: imcpy.Maneuver):
+        self.imc_M_to_ros(msg)
 
     @Subscribe(imcpy.PlanControl)
     def recv_plan(self, msg: imcpy.PlanControl):
@@ -107,28 +114,36 @@ class Imc2Ros(DynamicActor):
     def recv_planspec(self, msg: imcpy.PlanSpecification):
         self.imc_PS_to_ros(msg)
 
-    # @Subscribe(imcpy.PolygonVertex)
-    # def recv_polygonvertex(self, msg: imcpy.PolygonVertex):
-    #     self.imc_PV_to_ros(msg)
+    @Subscribe(imcpy.PolygonVertex)
+    def recv_polygonvertex(self, msg: imcpy.PolygonVertex):
+        self.imc_PV_to_ros(msg)
 
-    # @Subscribe(imcpy.RemoteState)
-    # def recv_remotestate(self, msg: imcpy.RemoteState):
-    #     self.imc_RS_to_ros(msg)
+    @Subscribe(imcpy.RemoteState)
+    def recv_remotestate(self, msg: imcpy.RemoteState):
+        self.imc_RS_to_ros(msg)
 
-    # @Subscribe(imcpy.SonarData)
-    # def recv_sonar(self, msg: imcpy.SonarData):
-    #     self.imc_SD_to_ros(msg)
+    @Subscribe(imcpy.SonarData)
+    def recv_sonar(self, msg: imcpy.SonarData):
+        self.imc_SD_to_ros(msg)
 
-    # @Subscribe(imcpy.VehicleState)
-    # def recv_vstate(self, msg: imcpy.VehicleState):
-    #     self.imc_VS_to_ros(msg)
+    @Subscribe(imcpy.VehicleState)
+    def recv_vstate(self, msg: imcpy.VehicleState):
+        self.imc_VS_to_ros(msg)
     
-    # @Subscribe(imcpy.Goto)
-    # def recv_goto(self, msg: imcpy.Goto):
-    #     self.imc_Goto_to_ros(msg)
+    @Subscribe(imcpy.Goto)
+    def recv_goto(self, msg: imcpy.Goto):
+        self.imc_Goto_to_ros(msg)
 
-    
-
+    @Subscribe(imcpy.FollowRefState)
+    def recv_followrefstate(self, imc_msg: imcpy.FollowRefState):
+        msg = FollowRefState()
+        msg.control_src = imc_msg.control_src
+        msg.control_ent = imc_msg.control_ent
+        msg.state = imc_msg.state
+        msg.proximity = imc_msg.proximity
+        msg.reference = imc_msg.reference
+        self.follow_ref_state_publisher_.publish(msg)
+        self.ros_node.get_logger().debug('Published FollowRefState {}.'.format(imc_msg.reference))
 
     def imc_DH_to_ros(self, imc_msg: imcpy.DesiredHeading):
         msg = DesiredHeading()
@@ -380,6 +395,79 @@ class Imc2Ros(DynamicActor):
         self.goto_publisher_.publish(msg)
         self.ros_node.get_logger().debug('Published Goto {}.'.format(imc_msg.lat))
 
+    def reference_callback(self, msg):
+        """
+        After the FollowReferenceManeuver is started, references must be sent continously
+        """
+        node = self.resolve_node_id(self.target_name)
+
+        r = imcpy.Reference()
+        r.lat = msg.lat
+        r.lon = msg.lon
+        r.radius = msg.radius
+
+        # Assign z
+        dz = imcpy.DesiredZ()
+        dz.value = msg.z.value
+        dz.z_units = msg.z.z_units
+        r.z = dz
+
+        # Assign the speed
+        ds = imcpy.DesiredSpeed()
+        ds.value = msg.speed.value
+        ds.speed_units = msg.speed.speed_units
+        r.speed = ds
+
+        # Bitwise flags (see IMC spec for explanation)
+        flags = imcpy.Reference.FlagsBits.LOCATION | imcpy.Reference.FlagsBits.SPEED | imcpy.Reference.FlagsBits.Z
+        r.flags = flags
+        self.last_ref = r
+        self.send(node, r)
+
+
+    def followreference_callback(self, msg):
+        ''' If I receive a followreference from ROS, that means I want to send that reference to dune '''
+        while True:
+            try:
+                # This function resolves the map of connected nodes
+                node = self.resolve_node_id(self.target_name)
+
+                # Create FollowReference msg
+                fr = imcpy.FollowReference()
+                fr.control_src       = msg.control_src  # Controllable from all IMC adresses
+                fr.control_ent       = msg.control_ent  # Controllable from all entities
+                fr.timeout           = msg.timeout  # Maneuver stops when time since last Reference message exceeds this value
+                fr.loiter_radius     = msg.loiter_radius  # Default loiter radius when waypoint is reached
+                fr.altitude_interval = msg.altitude_interval
+                
+                # Add to PlanManeuver message
+                pman = imcpy.PlanManeuver()
+                pman.data = fr
+                pman.maneuver_id = self.name
+
+                # Add to PlanSpecification
+                spec = imcpy.PlanSpecification()
+                spec.plan_id = self.name
+                spec.maneuvers.append(pman)
+                spec.start_man_id = self.name
+                spec.description = 'A plan sent from ROS'
+
+                # Start plan
+                pc = imcpy.PlanControl()
+                pc.type = imcpy.PlanControl.TypeEnum.REQUEST
+                pc.op = imcpy.PlanControl.OperationEnum.START
+                pc.plan_id = self.name
+                pc.arg = spec
+
+                # Send the IMC message to the node
+                self.send(node, pc)
+                self.send_reference(node_id=self.target_name)
+
+            except KeyError as e:
+                # Target system is not connected
+                self.ros_node.get_logger().info('Could not deliver GOTO.')
+                continue
+            break
 
 
 def main():

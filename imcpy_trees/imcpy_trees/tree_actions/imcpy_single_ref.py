@@ -1,6 +1,8 @@
 import rclpy
 import logging, sys
 import time
+import socket
+
 import asyncio
 import inspect
 from contextlib import suppress
@@ -9,6 +11,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from imc_ros_msgs.msg import EstimatedState
 logger = logging.getLogger('examples.FollowRef')
+from imcpy.network.udp import IMCProtocolUDP, IMCSenderUDP
+
 
 import imcpy
 from imcpy.actors.dynamic import DynamicActor
@@ -26,6 +30,7 @@ class FollowSingleRef(DynamicActor):
         super().__init__() 
         self.name = node_name+str(int(time.time()*1000)) 
         self.ros_node = Node(self.name)
+        self.ros_node.get_logger().info('TTTTTTTTTTTTTTTTTTTTTTHIS IS WHEN I INNNNNIIITTT INIT')
         self.goal_handle = None
         if goal_handle:
             self.goal_handle = goal_handle
@@ -45,22 +50,29 @@ class FollowSingleRef(DynamicActor):
         self.heartbeat.append(target_name)       
 
         self.near = False
+        self._run_task = None
 
     def run_async_function(self):
-        
-        self._setup_event_loop()
-        pending = asyncio.all_tasks(self._loop)
-        self.ros_node.get_logger().info('')
-        for task in pending:
+        self.setup_event_loop()
+        try:
+            self._loop.run_forever()
+        except KeyboardInterrupt:
+            pending = asyncio.all_tasks(self._loop)
+            for task in pending:
+                task.cancel()
+                # Now we should await task to execute it's cancellation.
                 # Cancelled task raises asyncio.CancelledError that we can suppress when canceling
                 with suppress(asyncio.CancelledError):
                     self._loop.run_until_complete(task)
+        finally:
+            self._loop.close()
                     
-    def _setup_event_loop(self):
+    def setup_event_loop(self):
         """
         Setup of event loop and decorated functions
         """
         # Add event loop to instance
+        self.ros_node.get_logger().info('SETUP EVENT LOOP')
         if not self._loop:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
@@ -85,13 +97,42 @@ class FollowSingleRef(DynamicActor):
 
         # Subscriptions has been collected from all decorators
         # Add asyncio datagram endpoints to event loop
-        self._start_subscriptions()
+        self.start_subscriptions()
+    
+    def start_subscriptions(self):
+        """
+        Add asyncio datagram endpoint for all subscriptions
+        """
+        try:
+            self.ros_node.get_logger().info('******************STARTING SUBSCRIPTIONS****************')
+            # Add datagram endpoint for multicast announce
+            multicast_listener = self._loop.create_datagram_endpoint(lambda: IMCProtocolUDP(self, is_multicast=True),
+                                                                    family=socket.AF_INET)
+
+            # Add datagram endpoint for UDP IMC messages
+            imc_listener = self._loop.create_datagram_endpoint(lambda: IMCProtocolUDP(self,
+                                                                                    is_multicast=False,
+                                                                                    static_port=self.static_port),
+                                                            family=socket.AF_INET)
+            self.multicast_listener = multicast_listener
+            self.imc_listener = imc_listener
+            if sys.version_info < (3, 4, 4):
+                with suppress(asyncio.CancelledError):
+                    self._task_mc = self._loop.create_task(multicast_listener)
+                    self._task_imc = self._loop.create_task(imc_listener)
+            else:
+                with suppress(asyncio.CancelledError):
+                    self._task_mc = asyncio.ensure_future(multicast_listener)
+                    self._task_imc = asyncio.ensure_future(imc_listener)
+        except Exception as e:
+            self.ros_node.get_logger().info('CAUGHT EXCEPTION EE')
+            self.ros_node.get_logger().info(e)
 
     def send_reference(self, node_id, final=False):
         """
         After the FollowReferenceManeuver is started, references must be sent continously
         """
-
+        
         node = self.resolve_node_id(node_id)
         try:
 
@@ -125,6 +166,8 @@ class FollowSingleRef(DynamicActor):
             pass
 
     def stop_Plan(self):
+        # follow ref finished
+        # self.send_reference(node_id=self.target_name,final=True)
         # Stop plan
         pc = imcpy.PlanControl()
         pc.type = imcpy.PlanControl.TypeEnum.REQUEST
@@ -135,10 +178,64 @@ class FollowSingleRef(DynamicActor):
         node = self.resolve_node_id(self.target_name)
         self.send(node, pc)
         self.stop()
+        # try:
+        #     self._task_mc.cancel()
+        # except asyncio.CancelledError:
+        #     pass  # Handle the CancelledError if needed
+        # except Exception as e:
+        #     # Handle other exceptions that may occur during cancellation
+        #     print(f"An error occurred during taskmc cancellation: {e}")
+        # try:
+        #     self._task_imc.cancel()
+        # except asyncio.CancelledError:
+        #     pass  # Handle the CancelledError if needed
+        # except Exception as e:
+        #     # Handle other exceptions that may occur during cancellation
+        #     print(f"An error occurred during taskimc cancellation: {e}")
+        
+        
         self.ros_node.destroy_node()
+        self.remove_node(node)
+        self.near = True
         self.ros_node.get_logger().info('***********Stop FollowRef command*************')
+        # if self._task_mc.cancelled():
+        #     self.ros_node.get_logger().info('mc task cancelled')
+        # else:
+        #     self.ros_node.get_logger().info('mc task NOT cancelled')
+        
+        # if self._task_imc.cancelled():
+        #     self.ros_node.get_logger().info('imc task cancelled')
+        # else:
+        #     self.ros_node.get_logger().info('imc task NOT cancelled')
         return True
 
+    def mystop(self):
+        """
+        Cancels all running tasks and stops the event loop.
+        :return:
+        """
+        loop = self._loop
+
+        self.ros_node.get_logger().info('Stop called by user. Cancelling all running tasks.')
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                    self._loop.run_until_complete(task)
+
+        async def exit_event_loop():
+            self.ros_node.get_logger().info('Tasks cancelled. Stopping event loop.')
+            loop.stop()
+
+        asyncio.ensure_future(exit_event_loop())
+
+
+        pending = asyncio.all_tasks(self._loop)
+        for task in pending:
+            task.cancel()
+            # Now we should await task to execute it's cancellation.
+            # Cancelled task raises asyncio.CancelledError that we can suppress when canceling
+            with suppress(asyncio.CancelledError):
+                self._loop.run_until_complete(task)
         
     @Periodic(10)
     def send_FollowReference(self):
@@ -191,6 +288,7 @@ class FollowSingleRef(DynamicActor):
 
     @Subscribe(imcpy.FollowRefState)
     def recv_plandbstate(self, msg: imcpy.FollowRefState):
+        self.ros_node.get_logger().info('YOYOYOYOYOO1111111')
         if self.goal_handle:
             feedback_msg = FollowSingleReference.Feedback()
             feedback_msg.state = 0
@@ -202,7 +300,6 @@ class FollowSingleRef(DynamicActor):
             # In goto maneuver
             self.ros_node.get_logger().info('Goto')
             if msg.proximity & imcpy.FollowRefState.ProximityBits.XY_NEAR:
-                self.near = True
                 # Near XY - send next reference
                 self.ros_node.get_logger().info('-------------- Near XY')
                 self.last_ref = False
@@ -211,7 +308,6 @@ class FollowSingleRef(DynamicActor):
             # Loitering/hovering/waiting - send next reference
             self.ros_node.get_logger().info('Point reached: Loiter/Hover')
             time.sleep(1)
-            self.near = True
             self.stop_Plan()
         elif msg.state == imcpy.FollowRefState.StateEnum.WAIT:
             # Loitering/hovering/waiting - send next reference

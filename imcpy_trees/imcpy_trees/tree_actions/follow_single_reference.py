@@ -56,6 +56,7 @@ class FollowSingleReferenceServer(GenericServer):
                          generate_feedback_message=self.generate_feedback_message,
                          duration=2.0 * math.pi / rotation_rate
                          )
+        self.node.get_logger().info("------------------CREATED SERVER---------------------")
 
     def generate_feedback_message(self, msg):
         """
@@ -84,11 +85,12 @@ class FollowSingleReferenceServer(GenericServer):
             goal_handle (:class:`~rclpy.action.server.ServerGoalHandle`): the goal handle of the executing action
         """
         # goal.details (e.g. pose) = don't care
-        self.node.get_logger().info("executing a goal")
+        self.node.get_logger().info("------------------executing a goal---------------------")
         dune_actor = FollowSingleRef(lat = goal_handle._goal_request.lat, lon = goal_handle._goal_request.lon, depth = goal_handle._goal_request.z, speed= goal_handle._goal_request.speed, target_name='lauv-simulator-1')
         def initialize_imcpy_task():
             self.node.get_logger().info("Initializing async functions")
             dune_actor.run_async_function()
+            # dune_actor.run()
             event.set()
 
         # Create an event for synchronization
@@ -123,6 +125,11 @@ class FollowSingleReferenceServer(GenericServer):
                     elif near:
                         result = self.generate_success_result()
                         message = "goal executed with success"
+                        event.wait()
+                        self.node.get_logger().info("Event finished")
+                        time.sleep(10)
+                        del dune_actor
+                        self.node.get_logger().info("dune actor deleted")
                         goal_handle.succeed()
                         continue_server = False
                     else:
@@ -137,9 +144,18 @@ class FollowSingleReferenceServer(GenericServer):
 
         # Wait for the thread to finish before continuing in the main thread
         event.wait()
+        self.node.get_logger().info("Event finished")
+        # if dune_actor._task_mc.cancelled():
+        #     dune_actor.ros_node.get_logger().info('mc task cancelled')
+        # else:
+        #     dune_actor.ros_node.get_logger().info('mc task NOT cancelled')
+        #     # dune_actor._task_mc.cancel()
+        
 
-        del dune_actor
 
+        # del dune_actor
+        # self.node.get_logger().info("dune actor deleted")
+        
         return result
             
 

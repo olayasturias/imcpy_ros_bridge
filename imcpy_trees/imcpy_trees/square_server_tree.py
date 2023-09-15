@@ -87,10 +87,8 @@ import py_trees_ros.trees
 import py_trees.console as console
 import py_trees_ros_interfaces.action as py_trees_actions  # noqa
 import imc_ros_msgs.action as imc_ros_actions
-from .behaviours.follow_one_reference import FollowOneReference
 import rclpy
 import sys
-from imc_ros_msgs.msg import FollowRefState
 
 # from .behaviours.follow_one_reference import FollowOneReference
 
@@ -118,15 +116,13 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         )
     )
 
-    topics2bb = py_trees.composites.Parallel(name="Topics2BB", memory=True)
-    followrefstate2BB = py_trees_ros.subscribers.ToBlackboard(
-        name="FollowReferenceState",
-        topic_name="from_imc/followref_state",
-        topic_type=FollowRefState,
+    topics2bb = py_trees.composites.Sequence(name="Topics2BB", memory=True)
+    estimatedState2bb = py_trees_ros.subscribers.ToBlackboard(
+        name="EstimatedState2BB",
+        topic_name="base_link",
+        topic_type=geometry_msgs.PoseStamped,
         qos_profile=py_trees_ros.utilities.qos_profile_unlatched(),
-        blackboard_variables = {'FollowRefState': None} # copy all data
     )
-
     priorities = py_trees.composites.Selector(name="Tasks", memory=False)
     idle = py_trees.behaviours.Running(name="Idle")
     tasks = py_trees.composites.Selector(name="Tasks", memory=False)
@@ -135,8 +131,8 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
     scan = py_trees.composites.Sequence(name="MovetoNext", memory=True)
 
     goal1 = imc_ros_actions.FollowSingleReference.Goal()
-    goal1.lat = 
-    goal1.lon = 
+    goal1.lat = 41.18541112
+    goal1.lon = -8.70588612
     goal1.z = 2.
     goal1.speed = 1.6
 
@@ -163,14 +159,6 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
     goal5.lon = -8.70588612
     goal5.z = 2.
     goal5.speed = 1.6
-
-    goal1_behaviour = FollowOneReference(
-        name = "FollowSingleReference_1",
-        lat = 41.18541112,
-        lon = -8.70588612,
-        z = 2.,
-        speed = 2.        
-    )
 
     goal1_action = py_trees_ros.actions.ActionClient(
         name="FollowSingleReference_1",
@@ -214,10 +202,10 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         wait_for_server_timeout_sec=100
     ) 
     root.add_child(topics2bb)
-    topics2bb.add_child(followrefstate2BB)
+    topics2bb.add_child(estimatedState2bb)
     root.add_child(tasks)
     tasks.add_children([scan, idle])
-    scan.add_children([goal1_behaviour, goal2_action, goal3_action,goal4_action,goal5_action])
+    scan.add_children([goal1_action,goal2_action, goal3_action,goal4_action,goal5_action])
 
     return root
 
