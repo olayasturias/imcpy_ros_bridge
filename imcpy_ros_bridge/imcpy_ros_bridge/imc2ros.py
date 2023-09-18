@@ -6,6 +6,7 @@ from imc_ros_msgs.msg import DesiredHeading, DesiredHeadingRate, DesiredPitch, D
 from imc_ros_msgs.msg import EstimatedState, Maneuver, PolygonVertex, RemoteState, SonarData, VehicleState, Goto, FollowRefState, FollowReference
 from imc_ros_msgs.msg import PlanControl, PlanControlState, PlanDB, PlanDBInformation,PlanDBState, PlanManeuver, PlanSpecification
 from geometry_msgs.msg import PoseStamped
+from threading import Thread
 
 import imcpy
 from imcpy.actors.dynamic import DynamicActor
@@ -17,15 +18,31 @@ from imcpy.network.utils import get_interfaces
 
 
 class Imc2Ros(DynamicActor):
-    def __init__(self, node_name='imc2ros', target_name='lauv-simulator-1'):
+    def __init__(self, node_name='imcpy_single_ref', target_name='lauv-simulator-1'):
         super().__init__()  
-        self.name = node_name
-        self.ros_node = Node(node_name)
-
-        # IMC STUFF
+        rclpy.init()
+        self.node_name = node_name
         self.target_name = target_name
+
+        self.ros_node = rclpy.create_node(self.node_name)
+        
         # This list contains the target systems to maintain communications with
         self.heartbeat.append(target_name)
+
+    def _start_subscriptions(self):
+        super()._start_subscriptions()
+        self.setup_ros_subscribers()
+
+    def run_forever(self):
+        # Run ROS node and asyncio event loop concurrently
+        ros_thread = Thread(target=self.run_ros)
+        ros_thread.start()
+        self.run()
+
+    def run_ros(self):
+        rclpy.spin(self.ros_node)
+
+    def setup_ros_subscribers(self):
 
         # Messages received from IMC and published to ROS
         self.desired_heading_publisher_     = self.ros_node.create_publisher(DesiredHeading,    'from_imc/desired_heading', 10)
@@ -55,10 +72,6 @@ class Imc2Ros(DynamicActor):
         self.follow_reference_subscriber_ = self.ros_node.create_subscription(FollowReference, 'to_imc/follow_reference', self.followreference_callback, 10)
         self.reference_subscriber_        = self.ros_node.create_subscription(Reference,       'to_imc/reference',        self.reference_callback, 10)
         
-        # This command starts the asyncio event loop
-        self.run()
-        self.ros_node.get_logger().info('Port at {}'.format(self._port_imc))
-
     async def wait_for_interval(self):
         await asyncio.sleep(.1)
 
@@ -181,12 +194,34 @@ class Imc2Ros(DynamicActor):
 
     @Subscribe(imcpy.FollowRefState)
     def recv_followrefstate(self, imc_msg: imcpy.FollowRefState):
+        
+
         msg = FollowRefState()
         msg.control_src = imc_msg.control_src
         msg.control_ent = imc_msg.control_ent
-        msg.state = imc_msg.state
+        msg.state = imc_msg.state.value
         msg.proximity = imc_msg.proximity
-        msg.reference = imc_msg.reference
+
+        if imc_msg.reference:
+            speed = DesiredSpeed()
+            speed.value = imc_msg.reference.speed.value
+            speed.speed_units = imc_msg.reference.speed.speed_units
+
+            z = DesiredZ()
+            z.value = imc_msg.reference.z.value
+            z.z_units = imc_msg.reference.z.z_units
+
+            ref = Reference()
+            ref.flags = imc_msg.reference.flags
+            ref.lat = imc_msg.reference.lat
+            ref.lon = imc_msg.reference.lon
+            ref.radius = imc_msg.reference.radius
+            ref.z = z
+            ref.speed = speed
+            msg.reference = ref
+
+
+
         self.follow_ref_state_publisher_.publish(msg)
         # self.ros_node.get_logger().debug('Published FollowRefState {}.'.format(imc_msg.reference))
 
@@ -228,41 +263,6 @@ class Imc2Ros(DynamicActor):
         msg.z_units = imc_msg.z_units
         self.desired_z_publisher_.publish(msg)
         # self.ros_node.get_logger().debug('Published Desired Z {}.'.format(imc_msg.value))
-    
-    def imc_EE_to_ros(self, imc_msg: imcpy.EstimatedState):
-        # Publish on PoseStamped (for UNavSim)
-        msg = PoseStamped()
-        msg.header.stamp = self.ros_node.get_clock().now().to_msg()
-        msg.header.frame_id = 'dune_map'
-        msg.pose.position.x = imc_msg.x
-        msg.pose.position.y = imc_msg.y
-        msg.pose.position.z = imc_msg.z
-        msg.pose.orientation.x = imc_msg.phi
-        msg.pose.orientation.y = imc_msg.theta
-        msg.pose.orientation.z = imc_msg.psi
-        self.pose_publisher_.publish(msg)
-        # Publish on Estimated State (for ROS2)
-        msg = EstimatedState()
-        msg.x = imc_msg.x
-        msg.y = imc_msg.y
-        msg.z = imc_msg.z
-        msg.phi = imc_msg.phi
-        msg.theta = imc_msg.theta
-        msg.psi = imc_msg.psi
-        msg.u = imc_msg.u
-        msg.v = imc_msg.v
-        msg.w = imc_msg.w
-        msg.p = imc_msg.p
-        msg.q = imc_msg.q
-        msg.r = imc_msg.r
-        msg.depth = imc_msg.depth
-        msg.alt = imc_msg.alt
-        msg.lat = imc_msg.lat
-        msg.lon = imc_msg.lon
-        msg.height = imc_msg.height
-        self.EE_publisher_.publish(msg)
-
-        # self.ros_node.get_logger().debug('Published Estimated State {}.'.format(imc_msg.x))
 
     def imc_M_to_ros(self, imc_msg: imcpy.Maneuver):
         msg = Maneuver()
@@ -479,42 +479,46 @@ class Imc2Ros(DynamicActor):
                 # Add to PlanManeuver message
                 pman = imcpy.PlanManeuver()
                 pman.data = fr
-                pman.maneuver_id = self.name
+                pman.maneuver_id = self.node_name
 
                 # Add to PlanSpecification
                 spec = imcpy.PlanSpecification()
-                spec.plan_id = self.name
+                spec.plan_id = self.node_name
                 spec.maneuvers.append(pman)
-                spec.start_man_id = self.name
+                spec.start_man_id = self.node_name
                 spec.description = 'A plan sent from ROS'
 
                 # Start plan
                 pc = imcpy.PlanControl()
                 pc.type = imcpy.PlanControl.TypeEnum.REQUEST
                 pc.op = imcpy.PlanControl.OperationEnum.START
-                pc.plan_id = self.name
+                pc.plan_id = self.node_name
                 pc.arg = spec
 
                 # Send the IMC message to the node
                 self.send(node, pc)
-                self.send_reference(node_id=self.target_name)
+                self.ros_node.get_logger().info('Sent GOTO')
 
             except KeyError as e:
                 # Target system is not connected
                 self.ros_node.get_logger().info('Could not deliver GOTO: {}'.format(e))
+                time.sleep(1)
                 continue
             break
 
 
 def main():
     print('Hi from imcpy_ros_bridge.')
-    rclpy.init()
     imc2ros = Imc2Ros(node_name='imc2ros', target_name='lauv-simulator-1')
     
-    rclpy.spin(imc2ros.ros_node)
-
-    imc2ros.ros_node.destroy_node()
-    rclpy.shutdown()
+    # Run the asyncio event loop until shutdown is triggered by ROS
+    try:
+        imc2ros.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        imc2ros.ros_node.destroy_node()
+        rclpy.shutdown()
 
 
 
