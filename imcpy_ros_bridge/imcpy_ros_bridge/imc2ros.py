@@ -51,8 +51,8 @@ class Imc2Ros(DynamicActor):
         self.follow_ref_state_publisher_    = self.ros_node.create_publisher(FollowRefState,    'from_imc/followref_state',10)
         
         # Messages received from ROS and sent to IMC
-        self.follow_reference_subscriber_ = self.create_subscription(FollowReference, 'to_imc/follow_reference', self.followreference_callback, 10)
-        self.reference_subscriber_        = self.create_subscription(Reference,       'to_imc/reference',        self.reference_callback, 10)
+        self.follow_reference_subscriber_ = self.ros_node.create_subscription(FollowReference, 'to_imc/follow_reference', self.followreference_callback, 10)
+        self.reference_subscriber_        = self.ros_node.create_subscription(Reference,       'to_imc/reference',        self.reference_callback, 10)
         
         # This command starts the asyncio event loop
         self.run()

@@ -51,7 +51,8 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         self.r.lon = lon
         self.radius = radius
         self.r.z.value = z
-        self.r.z.z_units = imcpy.ZUnits.DEPTH
+        print()
+        self.r.z.z_units = 1
         
         
         
@@ -90,8 +91,8 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         fr.control_src = 0xFFFF  # Controllable from all IMC adresses
         fr.control_ent = 0xFF  # Controllable from all entities
         fr.timeout = 10.0  # Maneuver stops when time since last Reference message exceeds this value
-        fr.loiter_radius = -1  # Default loiter radius when waypoint is reached
-        fr.altitude_interval = 0
+        fr.loiter_radius = -1.  # Default loiter radius when waypoint is reached
+        fr.altitude_interval = 0.
         fr_publisher.publish(fr)
 
         self.feedback_message = "FollowReference sent"
@@ -105,6 +106,8 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         Returns:
             Always returns :attr:`~py_trees.common.Status.RUNNING`
         """
+        bb=py_trees.blackboard.Blackboard()
+        msg=bb.get('FollowRefState')
         if msg.state == imcpy.FollowRefState.StateEnum.GOTO:
             # In goto maneuver
             self.feedback_message = "Goto"
