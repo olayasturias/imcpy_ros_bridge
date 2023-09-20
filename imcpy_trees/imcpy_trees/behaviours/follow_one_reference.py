@@ -4,13 +4,15 @@
 ##############################################################################
 
 import py_trees
+import time
 import py_trees_ros
 import rcl_interfaces.msg as rcl_msgs
 import rcl_interfaces.srv as rcl_srvs
 import rclpy
 import imcpy
+from numpy import pi as pi
 import geometry_msgs.msg as geometry_msgs
-from imc_ros_msgs.msg import FollowReference, Reference, DesiredSpeed, DesiredZ
+from imc_ros_msgs.msg import FollowReference, Reference, DesiredSpeed, DesiredZ, PlanControl
 
 
 ##############################################################################
@@ -46,13 +48,19 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
             radius: float
     ):
         super(FollowOneReference, self).__init__(name=name)
+
+        self.name = name
         self.r = Reference()
-        self.r.lat = lat
-        self.r.lon = lon
+        self.r.lat = lat*pi/180
+        self.r.lon = lon*pi/180
         self.radius = radius
         self.r.z.value = z
-        print()
         self.r.z.z_units = 1
+        self.r.speed.value = speed
+        self.r.flags = imcpy.Reference.FlagsBits.LOCATION | imcpy.Reference.FlagsBits.SPEED | imcpy.Reference.FlagsBits.Z | imcpy.Reference.FlagsBits.MANDONE
+
+        self.last_reference = self.r
+        self.last_reference.flags = self.r.flags | imcpy.Reference.FlagsBits.MANDONE
         
         
         
@@ -67,7 +75,7 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         Raises:
             :class:`KeyError`: if a ros2 node isn't passed under the key 'node' in kwargs
         """
-        self.logger.debug("{}.setup()".format(self.qualified_name))
+        self.logger.info("{}.setup()".format(self.qualified_name))
         try:
             self.node = kwargs['node']
         except KeyError as e:
@@ -75,7 +83,7 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
             raise KeyError(error_message) from e  # 'direct cause' traceability
         
         # First we need to send FollowReference only once
-        fr_publisher = self.node.create_publisher(
+        self.fr_publisher = self.node.create_publisher(
             msg_type = FollowReference,
             topic ='to_imc/follow_reference',
             qos_profile=py_trees_ros.utilities.qos_profile_latched()
@@ -93,9 +101,14 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         fr.timeout = 10.0  # Maneuver stops when time since last Reference message exceeds this value
         fr.loiter_radius = -1.  # Default loiter radius when waypoint is reached
         fr.altitude_interval = 0.
-        fr_publisher.publish(fr)
-
+        self.fr_publisher.publish(fr)
+        self.reference_pub.publish(self.r)
         self.feedback_message = "FollowReference sent"
+
+        self.stopped = False
+        self.reached = False
+        self.waiting = False
+        self.end = False
 
     def update(self) -> py_trees.common.Status:
         """
@@ -106,39 +119,107 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         Returns:
             Always returns :attr:`~py_trees.common.Status.RUNNING`
         """
-        bb=py_trees.blackboard.Blackboard()
-        msg=bb.get('FollowRefState')
-        if msg.state == imcpy.FollowRefState.StateEnum.GOTO:
-            # In goto maneuver
-            self.feedback_message = "Goto"
-            if msg.proximity & imcpy.FollowRefState.ProximityBits.XY_NEAR:
-                # Near XY - send next reference
-                self.feedback_message = "------ Near XY"
+        if not self.end:
+            bb=py_trees.blackboard.Blackboard()
+            key,val = bb.key_with_attributes('/FollowRefState')
+            fr_msg=bb.storage.get('/FollowRefState')
+            vs_msg=bb.storage.get('/VehicleState')
+            if fr_msg is not None or fr_msg == 0 and not self.stopped:
+                self.logger.info("msg {}".format(fr_msg))
+                if fr_msg.state == imcpy.FollowRefState.StateEnum.GOTO:
+                    # In goto maneuver
+                    self.feedback_message = "Goto"
+                    if fr_msg.proximity & imcpy.FollowRefState.ProximityBits.XY_NEAR:
+                        # Near XY - send next reference
+                        self.feedback_message = "------ Near XY"
+                        self.logger.info("NEAR")
+                        self.reached = True
+                        # return py_trees.common.Status.SUCCESS
+                    self.reference_pub.publish(self.r)
+                    # return py_trees.common.Status.RUNNING
+
+                elif fr_msg.state in (imcpy.FollowRefState.StateEnum.LOITER, imcpy.FollowRefState.StateEnum.HOVER):
+                    # Loitering/hovering/waiting - send next reference
+                    self.feedback_message = "Point reached: Loiter/Hover"
+                    self.logger.info("LOITER")
+                    self.reached = True
+                    # return py_trees.common.Status.RUNNING
+
+                elif fr_msg.state == imcpy.FollowRefState.StateEnum.WAIT:
+                    # Loitering/hovering/waiting - send next reference
+                    self.feedback_message = "Waiting"
+                    self.reference_pub.publish(self.r)
+                    if self.reached:
+                        self.waiting = True
+                    # return py_trees.common.Status.RUNNING
+                
+                elif fr_msg.state == imcpy.FollowRefState.StateEnum.ELEVATOR:
+                    # Moving in z-direction after reaching reference cylinder
+                    self.feedback_message = "Elevator"
+                    self.logger.info("ELEVATORR")
+                    self.reference_pub.publish(self.r)
+                    # return py_trees.common.Status.RUNNING
+
+                elif fr_msg.state == imcpy.FollowRefState.StateEnum.TIMEOUT:
+                    # Controlling system timed out
+                    self.feedback_message = "TIMEOUT"
+                    return py_trees.common.Status.FAILURE
+                elif fr_msg.state ==0:
+                    self.feedback_message = "Waiting for state msg"
+                    fr = FollowReference()
+                    fr.control_src = 0xFFFF  # Controllable from all IMC adresses
+                    fr.control_ent = 0xFF  # Controllable from all entities
+                    fr.timeout = 10.0  # Maneuver stops when time since last Reference message exceeds this value
+                    fr.loiter_radius = -1.  # Default loiter radius when waypoint is reached
+                    fr.altitude_interval = 0.
+                    self.fr_publisher.publish(fr)
+                    
+            if fr_msg is None and not self.stopped:
+                self.feedback_message = "Waiting for state msg"
+                fr = FollowReference()
+                fr.control_src = 0xFFFF  # Controllable from all IMC adresses
+                fr.control_ent = 0xFF  # Controllable from all entities
+                fr.timeout = 10.0  # Maneuver stops when time since last Reference message exceeds this value
+                fr.loiter_radius = -1.  # Default loiter radius when waypoint is reached
+                fr.altitude_interval = 0.
+                self.fr_publisher.publish(fr)
+                return py_trees.common.Status.RUNNING
+            
+            if vs_msg == 0 and self.stopped:
+                # key,val = bb.key_with_attributes('/FollowRefState')
+                # msg=bb.storage.get('/FollowRefState')
+                # bb.set(key, None)
+                # key,val = bb.key_with_attributes('/FollowRefState')
+                # msg=bb.storage.get('/FollowRefState')
+                # msg = None
+                # key = None
+                frstate_previous = py_trees.blackboard.Blackboard().get('/FollowRefState')
+                frstate_previous.state = 0
+                py_trees.blackboard.Blackboard().set('/FollowRefState', frstate_previous)
+
+                self.feedback_message = "Plan stopped"
+                self.logger.info("send success ---------------------")
                 return py_trees.common.Status.SUCCESS
-            return py_trees.common.Status.RUNNING
+            elif self.reached and not self.stopped:
+                end_pub = self.node.create_publisher(
+                    msg_type = PlanControl,
+                    topic = 'to_imc/plan_control',
+                    qos_profile=py_trees_ros.utilities.qos_profile_latched()
+                )
 
-        elif msg.state in (imcpy.FollowRefState.StateEnum.LOITER, imcpy.FollowRefState.StateEnum.HOVER):
-            # Loitering/hovering/waiting - send next reference
-            self.feedback_message = "Point reached: Loiter/Hover"
-            self.reference_pub.publish(self.r)
-            self.send_reference(node_id=self.target_name)
+                end_r = PlanControl()
+                end_r.type = 0 # imcpy.PlanControl.TypeEnum.REQUEST
+                end_r.op = 1 # imcpy.PlanControl.OperationEnum.STOP
+            
+                end_pub.publish(end_r)
+                self.stopped = True
+                
+                self.feedback_message = "Stopping plan"
+                return py_trees.common.Status.RUNNING
+            else:
+                return py_trees.common.Status.RUNNING
+        else:
             return py_trees.common.Status.SUCCESS
-
-        elif msg.state == imcpy.FollowRefState.StateEnum.WAIT:
-            # Loitering/hovering/waiting - send next reference
-            self.feedback_message = "Waiting"
-            self.send_reference(node_id=self.target_name)
-            return py_trees.common.Status.RUNNING
-        
-        elif msg.state == imcpy.FollowRefState.StateEnum.ELEVATOR:
-            # Moving in z-direction after reaching reference cylinder
-            self.feedback_message = "Elevator"
-            return py_trees.common.Status.RUNNING
-
-        elif msg.state == imcpy.FollowRefState.StateEnum.TIMEOUT:
-            # Controlling system timed out
-            self.feedback_message = "TIMEOUT"
-            return py_trees.common.Status.FAILURE
 
 
         
@@ -150,10 +231,20 @@ class FollowOneReference(py_trees.behaviour.Behaviour):
         Args:
             new_status: the behaviour is transitioning to this new status
         """
-        self.logger.debug(
-            "{}.terminate({})".format(
-                self.qualified_name,
-                "{}->{}".format(self.status, new_status) if self.status != new_status else "{}".format(new_status)
-            )
-        )
+        self.logger.debug("SENDING STOP PLAN")
+        self.end = True
+        # if not self.stopped:
+            # end_pub = self.node.create_publisher(
+            #     msg_type = PlanControl,
+            #     topic = 'to_imc/plan_control',
+            #     qos_profile=py_trees_ros.utilities.qos_profile_latched()
+            # )
+
+            # end_r = PlanControl()
+            # end_r.type = 0 # imcpy.PlanControl.TypeEnum.REQUEST
+            # end_r.op = 1 # imcpy.PlanControl.OperationEnum.STOP
+        
+            # end_pub.publish(end_r)
+            # self.stopped = True
+
         self.feedback_message = "cleared"

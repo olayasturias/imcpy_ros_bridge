@@ -71,6 +71,7 @@ class Imc2Ros(DynamicActor):
         # Messages received from ROS and sent to IMC
         self.follow_reference_subscriber_ = self.ros_node.create_subscription(FollowReference, 'to_imc/follow_reference', self.followreference_callback, 10)
         self.reference_subscriber_        = self.ros_node.create_subscription(Reference,       'to_imc/reference',        self.reference_callback, 10)
+        self.plan_control_subscriber_     = self.ros_node.create_subscription(PlanControl,     'to_imc/plan_control',     self.plancontrol_callback, 10)
         
     async def wait_for_interval(self):
         await asyncio.sleep(.1)
@@ -205,11 +206,11 @@ class Imc2Ros(DynamicActor):
         if imc_msg.reference:
             speed = DesiredSpeed()
             speed.value = imc_msg.reference.speed.value
-            speed.speed_units = imc_msg.reference.speed.speed_units
+            speed.speed_units = int(imc_msg.reference.speed.speed_units.value)
 
             z = DesiredZ()
             z.value = imc_msg.reference.z.value
-            z.z_units = imc_msg.reference.z.z_units
+            z.z_units = int(imc_msg.reference.z.z_units.value)
 
             ref = Reference()
             ref.flags = imc_msg.reference.flags
@@ -457,6 +458,21 @@ class Imc2Ros(DynamicActor):
         r.flags = flags
         self.last_ref = r
         self.send(node, r)
+        self.ros_node.get_logger().info('Sent GOTO {}'.format(node))
+
+    def plancontrol_callback(self, msg):
+        """
+        After the FollowReferenceManeuver is started, references must be sent continously
+        """
+        node = self.resolve_node_id(self.target_name)
+
+        pc = imcpy.PlanControl()
+        pc.type = msg.type
+        pc.op = msg.op
+        pc.plan_id = self.node_name
+        
+        self.send(node, pc)
+        self.ros_node.get_logger().info('Sent GOTO {}'.format(node))
 
 
     def followreference_callback(self, msg):
@@ -497,14 +513,15 @@ class Imc2Ros(DynamicActor):
 
                 # Send the IMC message to the node
                 self.send(node, pc)
-                self.ros_node.get_logger().info('Sent GOTO')
+                self.ros_node.get_logger().info('Sent Followref {}'.format(self.node_name))
+                break
 
             except KeyError as e:
                 # Target system is not connected
                 self.ros_node.get_logger().info('Could not deliver GOTO: {}'.format(e))
                 time.sleep(1)
                 continue
-            break
+            
 
 
 def main():

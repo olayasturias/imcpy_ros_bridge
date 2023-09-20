@@ -87,10 +87,10 @@ import py_trees_ros.trees
 import py_trees.console as console
 import py_trees_ros_interfaces.action as py_trees_actions  # noqa
 import imc_ros_msgs.action as imc_ros_actions
-from .behaviours.follow_one_reference import FollowOneReference
+from behaviours.follow_one_reference import FollowOneReference
 import rclpy
 import sys
-from imc_ros_msgs.msg import FollowRefState
+from imc_ros_msgs.msg import FollowRefState, VehicleState
 
 # from .behaviours.follow_one_reference import FollowOneReference
 
@@ -128,6 +128,13 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         qos_profile=py_trees_ros.utilities.qos_profile_unlatched(),
         blackboard_variables = {'FollowRefState': None} # copy all data
     )
+    vehiclestate2BB = py_trees_ros.subscribers.ToBlackboard(
+        name="VehicleState",
+        topic_name="from_imc/vehicle_state",
+        topic_type=VehicleState,
+        qos_profile=py_trees_ros.utilities.qos_profile_unlatched(),
+        blackboard_variables = {'VehicleState': 'op_mode'} # copy op_mode
+    )
 
     priorities = py_trees.composites.Selector(name="Tasks", memory=False)
     idle = py_trees.behaviours.Running(name="Idle")
@@ -145,11 +152,29 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         radius=-1.        
     )
 
+    goal2_behaviour = FollowOneReference(
+        name = "FollowSingleReference_2",
+        lat = 41.18469722,
+        lon = -8.70514722,
+        z = 2.,
+        speed = 2.,
+        radius=-1.        
+    )
+
+    goal3_behaviour = FollowOneReference(
+        name = "FollowSingleReference_3",
+        lat = 41.18413888,
+        lon = -8.70608888,
+        z = 2.,
+        speed = 2.,
+        radius=-1.        
+    )
+
     root.add_child(topics2bb)
-    topics2bb.add_child(followrefstate2BB)
+    topics2bb.add_children([followrefstate2BB, vehiclestate2BB])
     root.add_child(tasks)
     tasks.add_children([scan, idle])
-    scan.add_children([goal1_behaviour])
+    scan.add_children([goal1_behaviour, goal2_behaviour, goal3_behaviour])
 
     return root
 
@@ -187,3 +212,6 @@ def main():
     finally:
         tree.shutdown()
         rclpy.try_shutdown()
+
+if __name__ == '__main__':
+    main()
