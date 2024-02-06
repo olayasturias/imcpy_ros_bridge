@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.9
 # -*- coding: utf-8 -*-
 #
 # License: BSD
@@ -87,12 +87,12 @@ import py_trees_ros.trees
 import py_trees.console as console
 import py_trees_ros_interfaces.action as py_trees_actions  # noqa
 import imc_ros_msgs.action as imc_ros_actions
-from behaviours.follow_one_reference import FollowOneReference
+# from behaviours.follow_one_reference import FollowOneReference
 import rclpy
 import sys
 from imc_ros_msgs.msg import FollowRefState, VehicleState
 
-# from .behaviours.follow_one_reference import FollowOneReference
+from .behaviours.follow_one_reference import FollowOneReference
 
 import geometry_msgs.msg as geometry_msgs
 
@@ -190,7 +190,7 @@ def main():
         unicode_tree_debug=True
     )
     try:
-        tree.setup(node_name="behaviorTree_creator", timeout=15.0)
+        tree.setup(timeout=15.0)
     except py_trees_ros.exceptions.TimedOutError as e:
         console.logerror(console.red + "failed to setup the tree, aborting [{}]".format(str(e)) + console.reset)
         tree.shutdown()
