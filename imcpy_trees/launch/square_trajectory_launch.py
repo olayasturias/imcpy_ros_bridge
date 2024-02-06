@@ -28,7 +28,7 @@ def generate_launch_description():
                 executable="square",
                 output='screen',
                 emulate_tty=True,
-                arguments=['--ros-args', '--log-level', 'DEBUG']
+                # arguments=['--ros-args', '--log-level', 'DEBUG']
             ),
         ]
     )

@@ -87,7 +87,7 @@ import py_trees_ros.trees
 import py_trees.console as console
 import py_trees_ros_interfaces.action as py_trees_actions  # noqa
 import imc_ros_msgs.action as imc_ros_actions
-# from behaviours.follow_one_reference import FollowOneReference
+# from .behaviours.follow_one_reference import FollowOneReference
 import rclpy
 import sys
 from imc_ros_msgs.msg import FollowRefState, VehicleState
@@ -112,7 +112,7 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         the root of the tree
     """
     root = py_trees.composites.Parallel(
-        name="Tutorial One",
+        name="Square mission",
         policy=py_trees.common.ParallelPolicy.SuccessOnAll(
             synchronise=False
         )
@@ -148,7 +148,7 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         lat = 41.18541112,
         lon = -8.70588612,
         z = 2.,
-        speed = 2.,
+        speed = 5.,
         radius=-1.        
     )
 
@@ -157,7 +157,7 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         lat = 41.18469722,
         lon = -8.70514722,
         z = 2.,
-        speed = 2.,
+        speed = 5.,
         radius=-1.        
     )
 
@@ -166,7 +166,24 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
         lat = 41.18413888,
         lon = -8.70608888,
         z = 2.,
-        speed = 2.,
+        speed = 5.,
+        radius=-1.        
+    )
+
+    goal4_behaviour = FollowOneReference(
+        name = "FollowSingleReference_4",
+        lat = 41.18485,
+        lon = -8.70683055,
+        z = 2.,
+        speed = 5.,
+        radius=-1.        
+    )
+    goal5_behaviour = FollowOneReference(
+        name = "FollowSingleReference_5",
+        lat = 41.18541112,
+        lon = -8.70588612,
+        z = 2.,
+        speed = 5.,
         radius=-1.        
     )
 
@@ -174,7 +191,7 @@ def tutorial_create_root() -> py_trees.behaviour.Behaviour:
     topics2bb.add_children([followrefstate2BB, vehiclestate2BB])
     root.add_child(tasks)
     tasks.add_children([scan, idle])
-    scan.add_children([goal1_behaviour, goal2_behaviour, goal3_behaviour])
+    scan.add_children([goal1_behaviour, goal2_behaviour, goal3_behaviour, goal4_behaviour, goal5_behaviour])
 
     return root
 
